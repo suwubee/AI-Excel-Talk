@@ -1,0 +1,146 @@
+# Created by venv; see https://docs.python.org/3/library/venv.html
+*
+
+# Python虚拟环境
+pyvenv.cfg
+Scripts/
+Lib/
+Include/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 测试和临时文件
+.pytest_cache/
+.coverage
+*.log
+
+# IDE和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 配置文件（包含敏感信息）
+config.py
+.env
+
+# Excel临时文件
+~$*.xlsx
+~$*.xls
+
+# 用户上传的文件和生成的分析文件
+uploads/
+output/
+*_AI分析数据_*.json
+*_AI分析包_*.md
+
+# 🚫 AI Excel 智能分析工具 - Git忽略规则
+
+# Python缓存和编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# 虚拟环境
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+Scripts/
+Lib/
+Include/
+pyvenv.cfg
+
+# 用户数据和配置
+user_uploads/
+user_configs/
+*.log
+.streamlit/secrets.toml
+
+# 开发工具
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# 系统文件
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+.pytest_cache/
+
+# 环境变量文件
+.env
+.env.local
+.env.production
+.env.test
+
+# Docker
+.dockerignore
+
+# 部署配置（包含敏感信息的）
+secrets.toml
+local_settings.py
+
+# 备份文件
+backup*/
+*.backup
+*.bak
+
+# 测试覆盖率
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+.hypothesis/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# 数据文件（大文件）
+*.xlsx
+*.xls
+*.csv
+data/
+
+# 日志文件
+*.log
+logs/

@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  ai-excel-tool:
+    build: .
+    container_name: ai-excel-tool
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./user_uploads:/app/user_uploads
+      - ./user_configs:/app/user_configs  # 持久化用户配置
+    environment:
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - STREAMLIT_SERVER_HEADLESS=true
+      # 可选：预设API Key（不推荐，建议在应用中输入）
+      # - OPENAI_API_KEY=${OPENAI_API_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ai-excel-tool.rule=Host(`localhost`)"
+      - "traefik.http.services.ai-excel-tool.loadbalancer.server.port=8501"
+
+networks:
+  default:
+    name: ai-excel-network 
