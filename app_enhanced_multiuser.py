@@ -313,7 +313,13 @@ class EnhancedAIAnalyzer:
                                         value_counts = df[col].value_counts()
                                         if len(value_counts) > 0:
                                             top_values = value_counts.head(5)
-                                            prompt += f"  - 高频值: {dict(top_values)}\n"
+                                            # 修复FutureWarning: 使用.iloc而不是位置索引
+                                            top_values_dict = {}
+                                            for i in range(len(top_values)):
+                                                key = top_values.index[i]
+                                                value = top_values.iloc[i]
+                                                top_values_dict[key] = value
+                                            prompt += f"  - 高频值: {top_values_dict}\n"
                                             
                                             # 文本长度分析
                                             text_lengths = df[col].dropna().astype(str).str.len()
@@ -333,35 +339,38 @@ class EnhancedAIAnalyzer:
             
             # 分析提示
             prompt += """
-请基于以上完整数据，进行深度业务分析，包括：
+作为资深业务数据分析师，请基于上述真实数据进行深度业务理解和价值挖掘分析：
 
-📊 **核心业务场景分析**:
-- 这些数据反映的具体业务场景和应用领域
-- 数据的业务价值和分析潜力
-- 主要业务流程和数据流向
+🎯 **业务洞察与价值发现**:
+- 基于数据模式和内容，推断这是什么业务场景（如销售、运营、财务、人力等）
+- 识别数据背后的核心业务问题和管理关注点
+- 分析数据的决策支撑价值和管理应用场景
+- 发现数据中隐含的业务规律和趋势
 
-🔗 **工作表关系分析**:
-- 不同工作表之间的业务逻辑关系
-- 关键字段和主外键关系
-- 数据整合和关联分析机会
+📊 **数据故事与商业逻辑**:
+- 从数据中读出"故事"：数据反映了什么业务现状和问题
+- 分析不同工作表的业务关联性和数据流向逻辑
+- 识别关键业务节点和数据流转环节
+- 找出可能的业务瓶颈、机会点或风险点
 
-💎 **关键指标识别**:
-- 核心业务指标(KPI)和度量字段
-- 可计算的衍生指标和比率
-- 潜在的异常值和数据质量问题
+💡 **实际分析价值与建议**:
+- 基于数据特征，提出3-5个具体的、可操作的分析方向
+- 每个分析方向都要说明：为什么重要、如何分析、预期收益
+- 建议具体的分析方法和可用工具（如透视表、图表类型等）
+- 指出数据中最有价值的分析维度和切入点
 
-📈 **分析建议**:
-- 推荐的具体分析方向和方法
-- 可进行的深度挖掘和洞察
-- 业务价值最大化的分析路径
+🎨 **可视化与呈现建议**:
+- 针对关键指标，推荐最适合的图表类型和展示方式
+- 建议制作哪些管理看板或报告
+- 提出数据呈现的最佳实践，让非技术人员也能理解
 
-请用中文回答，提供专业而实用的分析见解。
+请避免单纯的技术性描述，重点关注业务价值和实际应用，用业务语言而非技术术语进行表达。
 """
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是一位资深的业务数据分析专家，擅长从复杂数据中发现业务价值和洞察。"},
+                    {"role": "system", "content": "你是一位具有15年经验的资深业务数据分析师和商业顾问。你擅长从真实数据中洞察业务本质，发现商业价值，并提供可操作的分析建议。你的分析风格注重实用性和业务价值，能够将复杂的数据转化为清晰的商业洞察，帮助管理者做出明智决策。"},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
@@ -1749,32 +1758,38 @@ def main():
     
     # 处理文件上传
     if uploaded_file is not None:
-        try:
-            with st.spinner("📤 正在上传和处理文件..."):
-                # 使用会话管理器保存文件
-                file_path = session_manager.save_uploaded_file(
-                    session_id, 
-                    uploaded_file, 
-                    uploaded_file.name
-                )
-                
-                # 加载Excel数据
-                excel_data = st.session_state.excel_processor.load_excel(str(file_path))
-                st.session_state.excel_data = excel_data
-                
-                sheet_names = list(excel_data.keys())
-                if sheet_names:
-                    st.session_state.current_sheet = sheet_names[0]
-                
-                # 保存当前文件信息到session state
-                st.session_state.current_file_path = str(file_path)
-                st.session_state.current_file_name = uploaded_file.name
-                
-                st.success(f"✅ 文件上传成功！保存位置: {file_path.name}")
-                st.rerun()
-                
-        except Exception as e:
-            st.error(f"❌ 文件处理错误: {str(e)}")
+        # 检查是否已经处理过这个文件（避免重复上传）
+        if not hasattr(st.session_state, 'last_uploaded_file') or st.session_state.last_uploaded_file != uploaded_file.name:
+            try:
+                with st.spinner("📤 正在上传和处理文件..."):
+                    # 使用会话管理器保存文件
+                    file_path = session_manager.save_uploaded_file(
+                        session_id, 
+                        uploaded_file, 
+                        uploaded_file.name
+                    )
+                    
+                    # 加载Excel数据
+                    excel_data = st.session_state.excel_processor.load_excel(str(file_path))
+                    st.session_state.excel_data = excel_data
+                    
+                    sheet_names = list(excel_data.keys())
+                    if sheet_names:
+                        st.session_state.current_sheet = sheet_names[0]
+                    
+                    # 保存当前文件信息到session state
+                    st.session_state.current_file_path = str(file_path)
+                    st.session_state.current_file_name = uploaded_file.name
+                    st.session_state.last_uploaded_file = uploaded_file.name  # 记录已处理的文件
+                    
+                    st.success(f"✅ 文件上传成功！保存位置: {file_path.name}")
+                    st.rerun()
+                    
+            except Exception as e:
+                st.error(f"❌ 文件处理错误: {str(e)}")
+        else:
+            # 文件已经处理过，显示当前状态
+            st.info(f"📁 当前文件: {uploaded_file.name}")
     
     # 主要界面：使用Tabs
     if st.session_state.excel_data:
@@ -1848,8 +1863,68 @@ def main():
         with tab2:
             st.header("🤖 AI 智能分析")
             
+            # 轻量级Excel结构分析（无需API）
+            st.subheader("📋 Excel文件结构分析")
+            st.info("💡 即使没有配置AI API，您也可以获得Excel文件的结构分析")
+            
+            # 导入轻量级分析器
+            try:
+                from ai_tab_analyzer import AITabAnalyzer
+            except ImportError:
+                st.error("❌ 无法导入AI分析器，请确保ai_tab_analyzer.py文件存在")
+                AITabAnalyzer = None
+            
+            # 添加分析按钮和结果显示
+            col_quick_analyze, col_clear_analysis = st.columns([3, 1])
+            
+            with col_quick_analyze:
+                if st.button("🔍 快速分析Excel结构", type="secondary", use_container_width=True):
+                    if AITabAnalyzer is None:
+                        st.error("❌ AI分析器不可用")
+                    elif hasattr(st.session_state, 'current_file_path') and st.session_state.current_file_path:
+                        try:
+                            with st.spinner("📊 正在分析Excel文件结构..."):
+                                analyzer = AITabAnalyzer()
+                                analysis_result = analyzer.analyze_for_ai(st.session_state.current_file_path)
+                                st.session_state.quick_excel_analysis = analysis_result
+                                st.success("✅ Excel智能结构分析完成！")
+                                st.rerun()
+                        except Exception as e:
+                            st.error(f"❌ 结构分析失败: {str(e)}")
+                    else:
+                        st.warning("⚠️ 请先上传Excel文件")
+            
+            with col_clear_analysis:
+                if st.button("🗑️ 清除分析", use_container_width=True):
+                    if 'quick_excel_analysis' in st.session_state:
+                        del st.session_state.quick_excel_analysis
+                        st.rerun()
+            
+            # 显示快速分析结果
+            if 'quick_excel_analysis' in st.session_state and st.session_state.quick_excel_analysis:
+                st.subheader("📊 Excel结构分析结果")
+                with st.expander("📋 查看详细分析", expanded=True):
+                    st.markdown(st.session_state.quick_excel_analysis)
+                
+                # 功能说明和提示
+                st.info("📝 **智能分析说明**：\n"
+                       "- 🟢 **标准二维表格**：直接列出字段和筛选项\n"
+                       "- 🟡 **复杂表格**：智能处理合并单元格，识别字段递进关系\n"
+                       "- 🏷️ **自动筛选项识别**：≤10个唯一值的字段显示全部可选值\n"
+                       "- 📈 **F列后字段关系**：提供横向字段递进说明，便于AI理解")
+                
+                # 如果有API配置，提供将分析结果作为AI分析基础的选项
+                if api_key:
+                    st.success("💡 **AI分析提示**：上述结构分析将自动作为深度AI分析的基础信息，提高AI理解准确性！")
+            
+            # 分隔线
+            st.markdown("---")
+            
+            # 原有的AI分析功能
+            st.subheader("🧠 深度AI分析")
+            
             if not api_key:
-                st.warning("⚠️ 请在侧边栏配置OpenAI API Key")
+                st.warning("⚠️ 请在侧边栏配置OpenAI API Key以使用深度AI分析功能")
             else:
                 # 初始化AI分析器
                 ai_analyzer = EnhancedAIAnalyzer(api_key, base_url, selected_model)
@@ -1860,11 +1935,32 @@ def main():
                 with col_analyze:
                     if st.button("🔍 开始AI深度分析", type="primary", use_container_width=True):
                         with st.spinner("🧠 AI正在深度分析您的数据..."):
+                            # 获取Excel结构分析结果
+                            structure_info = ""
+                            if 'quick_excel_analysis' in st.session_state and st.session_state.quick_excel_analysis:
+                                structure_info = st.session_state.quick_excel_analysis
+                            
+                            # 进行AI深度分析（已包含数据内容和特征）
                             analysis = ai_analyzer.analyze_excel_structure(st.session_state.excel_data)
-                            st.session_state.excel_analysis = analysis
+                            
+                            # 构建完整的分析报告，将结构信息与业务分析结合
+                            if structure_info:
+                                combined_analysis = f"""## 📋 Excel文件结构解析
+
+{structure_info}
+
+---
+
+## 🎯 AI深度业务分析
+
+{analysis}"""
+                            else:
+                                combined_analysis = analysis
+                            
+                            st.session_state.excel_analysis = combined_analysis
                             st.session_state.chat_history.append({
                                 "role": "assistant",
-                                "content": f"**📋 Excel深度分析报告**\n\n{analysis}"
+                                "content": f"**📋 Excel深度分析报告**\n\n{combined_analysis}"
                             })
                 
                 with col_refresh:
