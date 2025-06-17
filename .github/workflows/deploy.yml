@@ -1,0 +1,423 @@
+name: 🚀 AI Excel 智能分析工具 - 自动化部署
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+env:
+  PYTHON_VERSION: '3.9'
+  
+jobs:
+  # 代码质量检查和测试
+  test:
+    name: 🔍 代码测试与质量检查
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 🐍 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ env.PYTHON_VERSION }}
+        
+    - name: 📦 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        
+    - name: 🔍 代码语法检查
+      run: |
+        echo "=== 检查Python语法 ==="
+        python -m py_compile app_enhanced_multiuser.py
+        python -m py_compile user_session_manager.py
+        python -m py_compile excel_utils.py
+        python -m py_compile config_multiuser.py
+        python -m py_compile generate_ai_analysis_package.py
+        python -m py_compile run_multiuser.py
+        echo "✅ 所有Python文件语法检查通过"
+        
+    - name: 📋 检查必要文件
+      run: |
+        echo "=== 检查项目文件完整性 ==="
+        required_files=(
+          "app_enhanced_multiuser.py"
+          "user_session_manager.py"
+          "excel_utils.py"
+          "config_multiuser.py"
+          "generate_ai_analysis_package.py"
+          "run_multiuser.py"
+          "requirements.txt"
+          "README.md"
+          "USER_GUIDE.md"
+          "DEVELOPER_GUIDE.md"
+        )
+        
+        for file in "${required_files[@]}"; do
+          if [ -f "$file" ]; then
+            echo "✅ $file 存在"
+          else
+            echo "❌ $file 缺失"
+            exit 1
+          fi
+        done
+        echo "✅ 所有必要文件检查完毕"
+
+  # Docker构建测试
+  build:
+    name: 🐳 Docker构建测试
+    runs-on: ubuntu-latest
+    needs: test
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 🐳 设置Docker Buildx
+      uses: docker/setup-buildx-action@v3
+      
+    - name: 🔨 构建Docker镜像
+      run: |
+        cat > Dockerfile << 'EOF'
+        FROM python:3.9-slim
+        
+        WORKDIR /app
+        
+        # 安装系统依赖
+        RUN apt-get update && apt-get install -y \
+            gcc \
+            && rm -rf /var/lib/apt/lists/*
+        
+        # 复制并安装Python依赖
+        COPY requirements.txt .
+        RUN pip install --no-cache-dir -r requirements.txt
+        
+        # 复制应用文件
+        COPY . .
+        
+        # 创建必要目录
+        RUN mkdir -p user_uploads
+        
+        # 设置环境变量
+        ENV STREAMLIT_SERVER_PORT=8501
+        ENV STREAMLIT_SERVER_ADDRESS=0.0.0.0
+        ENV STREAMLIT_SERVER_HEADLESS=true
+        ENV STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+        
+        # 暴露端口
+        EXPOSE 8501
+        
+        # 健康检查
+        HEALTHCHECK CMD curl --fail http://localhost:8501/_stcore/health
+        
+        # 启动命令
+        CMD ["streamlit", "run", "app_enhanced_multiuser.py", "--server.port=8501", "--server.address=0.0.0.0"]
+        EOF
+        
+        docker build -t ai-excel-tool:test .
+        echo "✅ Docker镜像构建成功"
+
+  # Streamlit Cloud部署准备
+  prepare-streamlit-cloud:
+    name: ☁️ Streamlit Cloud部署准备
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 📝 创建Streamlit配置
+      run: |
+        mkdir -p .streamlit
+        
+        cat > .streamlit/config.toml << 'EOF'
+        [server]
+        headless = true
+        port = 8501
+        enableCORS = false
+        enableXsrfProtection = false
+        
+        [browser]
+        gatherUsageStats = false
+        
+        [theme]
+        primaryColor = "#FF6B6B"
+        backgroundColor = "#FFFFFF"
+        secondaryBackgroundColor = "#F0F2F6"
+        textColor = "#262730"
+        EOF
+        
+        cat > .streamlit/secrets.toml << 'EOF'
+        # 在Streamlit Cloud中配置以下密钥：
+        # OPENAI_API_KEY = "your-openai-api-key"
+        # 或者用户可以在应用中手动输入
+        EOF
+        
+        echo "✅ Streamlit配置文件已创建"
+        
+    - name: 📄 创建部署说明文档
+      run: |
+        cat > DEPLOYMENT.md << 'EOF'
+        # 🚀 部署指南
+        
+        ## Streamlit Cloud部署（推荐）
+        
+        ### 1. 准备工作
+        1. Fork这个仓库到您的GitHub账户
+        2. 访问 [share.streamlit.io](https://share.streamlit.io)
+        3. 使用GitHub账户登录
+        
+        ### 2. 部署步骤
+        1. 点击 "New app"
+        2. 选择您fork的仓库
+        3. 主文件路径设置为：`app_enhanced_multiuser.py`
+        4. 点击 "Deploy!"
+        
+        ### 3. 环境变量配置（可选）
+        在Streamlit Cloud的App设置中，可以配置以下环境变量：
+        ```
+        OPENAI_API_KEY=your-openai-api-key
+        ```
+        
+        ## Docker部署
+        
+        ### 本地Docker运行
+        ```bash
+        # 构建镜像
+        docker build -t ai-excel-tool .
+        
+        # 运行容器
+        docker run -p 8501:8501 \
+          -v $(pwd)/user_uploads:/app/user_uploads \
+          -e OPENAI_API_KEY=your-api-key \
+          ai-excel-tool
+        ```
+        
+        ### Docker Compose
+        ```yaml
+        version: '3.8'
+        services:
+          ai-excel-tool:
+            build: .
+            ports:
+              - "8501:8501"
+            volumes:
+              - ./user_uploads:/app/user_uploads
+            environment:
+              - OPENAI_API_KEY=${OPENAI_API_KEY}
+            restart: unless-stopped
+        ```
+        
+        ## 云平台部署
+        
+        ### Railway
+        1. 连接GitHub仓库到Railway
+        2. 设置环境变量
+        3. 自动部署
+        
+        ### Render
+        1. 连接GitHub仓库
+        2. 选择Web Service
+        3. 启动命令：`streamlit run app_enhanced_multiuser.py --server.port $PORT --server.address 0.0.0.0`
+        
+        ### Heroku
+        需要添加以下文件：
+        
+        **Procfile:**
+        ```
+        web: streamlit run app_enhanced_multiuser.py --server.port $PORT --server.address 0.0.0.0
+        ```
+        
+        **runtime.txt:**
+        ```
+        python-3.9.18
+        ```
+        EOF
+        
+        echo "✅ 部署说明文档已创建"
+
+    - name: 📤 上传部署配置
+      uses: actions/upload-artifact@v3
+      with:
+        name: deployment-configs
+        path: |
+          .streamlit/
+          DEPLOYMENT.md
+          Dockerfile
+
+  # 发布Release
+  release:
+    name: 📦 创建Release版本
+    runs-on: ubuntu-latest
+    needs: [test, build, prepare-streamlit-cloud]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    
+    steps:
+    - name: 📥 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        
+    - name: 🏷️ 生成版本号
+      id: version
+      run: |
+        # 基于日期和commit生成版本号
+        VERSION="v$(date +'%Y.%m.%d')-$(git rev-parse --short HEAD)"
+        echo "version=$VERSION" >> $GITHUB_OUTPUT
+        echo "生成版本号: $VERSION"
+        
+    - name: 📦 创建Release包
+      run: |
+        # 创建发布包
+        mkdir -p release-package
+        
+        # 复制核心文件
+        cp -r \
+          app_enhanced_multiuser.py \
+          user_session_manager.py \
+          excel_utils.py \
+          config_multiuser.py \
+          generate_ai_analysis_package.py \
+          run_multiuser.py \
+          requirements.txt \
+          README.md \
+          USER_GUIDE.md \
+          DEVELOPER_GUIDE.md \
+          .github \
+          release-package/
+          
+        # 创建安装脚本
+        cat > release-package/install.sh << 'EOF'
+        #!/bin/bash
+        echo "🚀 AI Excel 智能分析工具 - 安装脚本"
+        echo "=================================="
+        
+        # 检查Python版本
+        python_version=$(python3 --version 2>&1 | awk '{print $2}' | cut -d. -f1-2)
+        echo "检测到Python版本: $python_version"
+        
+        if [[ $(echo "$python_version >= 3.8" | bc -l) -eq 1 ]]; then
+            echo "✅ Python版本符合要求"
+        else
+            echo "❌ Python版本需要 >= 3.8"
+            exit 1
+        fi
+        
+        # 安装依赖
+        echo "📦 安装依赖包..."
+        pip3 install -r requirements.txt
+        
+        # 创建启动脚本
+        cat > start.sh << 'EOL'
+        #!/bin/bash
+        echo "🚀 启动AI Excel智能分析工具..."
+        python3 run_multiuser.py
+        EOL
+        chmod +x start.sh
+        
+        echo "✅ 安装完成！"
+        echo "💡 使用 ./start.sh 启动应用"
+        EOF
+        chmod +x release-package/install.sh
+        
+        # 创建压缩包
+        cd release-package
+        tar -czf ../ai-excel-tool-${{ steps.version.outputs.version }}.tar.gz .
+        cd ..
+        
+    - name: 🎉 创建GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.version.outputs.version }}
+        name: AI Excel 智能分析工具 ${{ steps.version.outputs.version }}
+        body: |
+          ## 🚀 AI Excel 智能分析工具 - 新版本发布
+          
+          ### ✨ 主要特性
+          - 🤖 AI智能分析 - 深度业务理解、自然语言交互
+          - 🔐 多用户支持 - 完全数据隔离、会话管理  
+          - 💻 代码执行环境 - 安全隔离、文件自动拦截
+          - 📁 智能文件管理 - 自动拦截保存、分类下载
+          
+          ### 📦 安装方式
+          
+          #### 快速安装
+          ```bash
+          # 下载并解压
+          wget https://github.com/${{ github.repository }}/releases/download/${{ steps.version.outputs.version }}/ai-excel-tool-${{ steps.version.outputs.version }}.tar.gz
+          tar -xzf ai-excel-tool-${{ steps.version.outputs.version }}.tar.gz
+          cd ai-excel-tool-*
+          
+          # 运行安装脚本
+          chmod +x install.sh
+          ./install.sh
+          
+          # 启动应用
+          ./start.sh
+          ```
+          
+          #### Streamlit Cloud部署
+          1. Fork这个仓库
+          2. 访问 [share.streamlit.io](https://share.streamlit.io)
+          3. 选择仓库和 `app_enhanced_multiuser.py` 文件
+          4. 点击Deploy！
+          
+          ### 📚 文档
+          - [用户指南](USER_GUIDE.md)
+          - [开发者指南](DEVELOPER_GUIDE.md)
+          - [部署指南](DEPLOYMENT.md)
+          
+          ### 🆕 本次更新
+          - 完善GitHub Actions自动化部署
+          - 优化文档结构
+          - 修复已知问题
+          
+          ---
+          **💡 首次使用建议查看[用户指南](USER_GUIDE.md)了解完整功能**
+        files: |
+          ai-excel-tool-${{ steps.version.outputs.version }}.tar.gz
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # 通知任务
+  notify:
+    name: 📢 部署通知
+    runs-on: ubuntu-latest
+    needs: [test, build, prepare-streamlit-cloud]
+    if: always()
+    
+    steps:
+    - name: 📊 汇总部署状态
+      run: |
+        echo "=== 🚀 AI Excel 智能分析工具 - 部署状态汇总 ==="
+        echo "测试状态: ${{ needs.test.result }}"
+        echo "构建状态: ${{ needs.build.result }}"
+        echo "部署准备: ${{ needs.prepare-streamlit-cloud.result }}"
+        echo ""
+        
+        if [[ "${{ needs.test.result }}" == "success" && "${{ needs.build.result }}" == "success" ]]; then
+          echo "✅ 所有检查通过，可以进行部署！"
+          echo ""
+          echo "🚀 快速部署到Streamlit Cloud："
+          echo "1. 访问 https://share.streamlit.io"
+          echo "2. 连接此GitHub仓库"
+          echo "3. 主文件设置为: app_enhanced_multiuser.py"
+          echo "4. 点击Deploy！"
+          echo ""
+          echo "📦 本地部署："
+          echo "1. git clone ${{ github.server_url }}/${{ github.repository }}"
+          echo "2. cd AI-Excel-Talk"
+          echo "3. pip install -r requirements.txt"
+          echo "4. python run_multiuser.py"
+        else
+          echo "❌ 检查失败，请查看日志修复问题"
+          exit 1
+        fi 
