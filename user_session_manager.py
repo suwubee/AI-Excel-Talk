@@ -209,49 +209,9 @@ class UserSessionManager:
         Returns:
             Excel文件信息列表，包含文件名、路径、上传时间等
         """
-        workspace = self.get_user_workspace(session_id)
-        if not workspace:
-            return []
-        
-        uploads_dir = workspace / "uploads"
-        if not uploads_dir.exists():
-            return []
-        
-        excel_files = []
+        # 复用 get_user_files 方法，提供Excel文件过滤
         excel_extensions = ['.xlsx', '.xls', '.xlsm', '.xlsb']
-        
-        try:
-            for file_path in uploads_dir.iterdir():
-                if file_path.is_file() and file_path.suffix.lower() in excel_extensions:
-                    stat_info = file_path.stat()
-                    
-                    # 解析文件名中的时间戳（如果存在）
-                    filename = file_path.name
-                    display_name = filename
-                    
-                    # 如果文件名包含时间戳前缀，提取原始文件名
-                    if '_' in filename and len(filename.split('_')[0]) == 15:
-                        # 格式：20241201_123456_原始文件名.xlsx
-                        parts = filename.split('_', 2)
-                        if len(parts) >= 3:
-                            display_name = parts[2]
-                    
-                    excel_files.append({
-                        'filename': filename,  # 实际文件名
-                        'display_name': display_name,  # 显示名称
-                        'path': str(file_path),
-                        'size': stat_info.st_size,
-                        'modified_time': datetime.fromtimestamp(stat_info.st_mtime),
-                        'size_mb': round(stat_info.st_size / (1024 * 1024), 2)
-                    })
-            
-            # 按修改时间排序，最新的在前
-            excel_files.sort(key=lambda x: x['modified_time'], reverse=True)
-            
-        except Exception as e:
-            self.logger.error(f"获取Excel文件列表失败 {session_id}: {e}")
-        
-        return excel_files
+        return self.get_user_files(session_id, extensions=excel_extensions)
     
     def get_user_file_by_name(self, session_id: str, filename: str) -> Optional[Path]:
         """
@@ -362,6 +322,35 @@ class UserSessionManager:
             self.logger.error(f"获取用户文件列表失败 {session_id}: {e}")
         
         return all_files
+    
+    def get_user_files(self, session_id: str, extensions: List[str] = None) -> List[Dict[str, Any]]:
+        """
+        获取用户特定扩展名的文件列表
+        
+        Args:
+            session_id: 用户会话ID
+            extensions: 文件扩展名列表，如 ['.docx', '.pdf']
+        
+        Returns:
+            符合条件的文件信息列表
+        """
+        all_files = self.get_all_user_files(session_id)
+        
+        if not extensions:
+            return all_files
+        
+        # 将扩展名转换为小写进行比较
+        extensions_lower = [ext.lower() for ext in extensions]
+        
+        filtered_files = []
+        for file_info in all_files:
+            file_path = Path(file_info['path'])
+            file_ext = file_path.suffix.lower()
+            
+            if file_ext in extensions_lower:
+                filtered_files.append(file_info)
+        
+        return filtered_files
     
     def cleanup_user_session(self, session_id: str) -> bool:
         """

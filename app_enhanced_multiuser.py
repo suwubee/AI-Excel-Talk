@@ -124,6 +124,228 @@ window.streamlitLocalStorage = {
 </script>
 """, unsafe_allow_html=True)
 
+# 统一的内容容器样式函数
+def get_unified_content_styles():
+    """获取统一的内容容器样式"""
+    return """
+    <style>
+    /* 基础内容容器样式 */
+    .content-container-base {
+        overflow-y: auto;
+        border-radius: 8px;
+        padding: 18px;
+        font-size: 14px;
+        line-height: 1.6;
+        margin: 10px 0;
+    }
+    
+    /* 文档预览容器 */
+    .document-preview-container {
+        max-height: 500px;
+        border: 1px solid #4caf50;
+        background-color: #f1f8e9;
+        font-family: 'Source Code Pro', monospace;
+    }
+    
+    /* 文档结构容器 */
+    .document-structure-container {
+        max-height: 400px;
+        border: 1px solid #2196f3;
+        background-color: #f3f8ff;
+        font-family: 'Roboto', sans-serif;
+    }
+    
+    /* AI分析结果容器 */
+    .ai-analysis-container {
+        max-height: 600px;
+        border: 1px solid #ff5722;
+        background-color: #fff3e0;
+        font-family: 'Roboto', sans-serif;
+        box-shadow: 0 2px 4px rgba(255, 87, 34, 0.1);
+    }
+    
+    /* Excel结构分析容器 */
+    .excel-structure-container {
+        max-height: 450px;
+        border: 1px solid #4caf50;
+        background-color: #f1f8e9;
+        font-family: 'Monaco', 'Menlo', monospace;
+        font-size: 13px;
+        line-height: 1.5;
+    }
+    
+    /* Excel AI分析容器 */
+    .excel-ai-container {
+        max-height: 550px;
+        border: 1px solid #ff5722;
+        background-color: #fff3e0;
+        font-family: 'Roboto', sans-serif;
+        box-shadow: 0 2px 4px rgba(255, 87, 34, 0.1);
+    }
+    
+    /* 对话历史容器 */
+    .chat-container-base {
+        max-height: 500px;
+        overflow-y: auto;
+        border-radius: 8px;
+        padding: 18px;
+        font-family: 'Roboto', sans-serif;
+        font-size: 14px;
+        line-height: 1.5;
+    }
+    
+    .doc-chat-container {
+        border: 1px solid #ff9800;
+        background-color: #fff8e1;
+    }
+    
+    .excel-chat-container {
+        border: 1px solid #9c27b0;
+        background-color: #f3e5f5;
+    }
+    
+    /* 对话气泡样式 */
+    .chat-user {
+        background-color: #e3f2fd;
+        border-left: 4px solid #2196f3;
+        padding: 12px;
+        margin: 10px 0;
+        border-radius: 5px;
+    }
+    
+    .chat-ai {
+        background-color: #e8f5e8;
+        border-left: 4px solid #4caf50;
+        padding: 12px;
+        margin: 10px 0;
+        border-radius: 5px;
+    }
+    
+    .chat-divider {
+        border-top: 1px solid #d0d0d0;
+        margin: 15px 0;
+    }
+    
+    /* 标题样式 */
+    .content-container-base h1, .content-container-base h2, .content-container-base h3 {
+        margin-top: 18px;
+        margin-bottom: 10px;
+    }
+    
+    .document-preview-container h1, .document-preview-container h2, .document-preview-container h3,
+    .excel-structure-container h1, .excel-structure-container h2, .excel-structure-container h3 {
+        color: #2e7d32;
+    }
+    
+    .document-structure-container h1, .document-structure-container h2, .document-structure-container h3 {
+        color: #1976d2;
+    }
+    
+    .ai-analysis-container h1, .ai-analysis-container h2, .ai-analysis-container h3,
+    .excel-ai-container h1, .excel-ai-container h2, .excel-ai-container h3 {
+        color: #d84315;
+        border-bottom: 2px solid #ffccbc;
+        padding-bottom: 5px;
+    }
+    
+    /* 列表和段落样式 */
+    .content-container-base ul, .content-container-base ol {
+        margin-left: 18px;
+        margin-bottom: 10px;
+    }
+    
+    .content-container-base p {
+        margin-bottom: 10px;
+        text-align: justify;
+    }
+    
+    .content-container-base strong {
+        font-weight: 600;
+    }
+    
+    .document-preview-container strong, .excel-structure-container strong {
+        color: #388e3c;
+    }
+    
+    .ai-analysis-container strong, .excel-ai-container strong {
+        color: #ff5722;
+    }
+    
+    /* 代码样式 */
+    .excel-structure-container code {
+        background-color: #e8f5e8;
+        padding: 2px 4px;
+        border-radius: 3px;
+        font-family: 'Courier New', monospace;
+    }
+    
+    /* 引用样式 */
+    .ai-analysis-container blockquote, .excel-ai-container blockquote {
+        border-left: 4px solid #ff5722;
+        padding-left: 15px;
+        margin: 15px 0;
+        background-color: #fbe9e7;
+        font-style: italic;
+    }
+    </style>
+    """
+
+def render_content_container(content: str, container_type: str) -> None:
+    """
+    统一的内容容器渲染函数
+    
+    Args:
+        content: 要显示的内容
+        container_type: 容器类型 ('document-preview', 'document-structure', 'ai-analysis', 
+                       'excel-structure', 'excel-ai')
+    """
+    # 如果还没有添加样式，先添加
+    if not hasattr(st.session_state, '_unified_styles_added'):
+        st.markdown(get_unified_content_styles(), unsafe_allow_html=True)
+        st.session_state._unified_styles_added = True
+    
+    # 根据类型选择合适的CSS类
+    container_class = f"{container_type}-container content-container-base"
+    
+    # 渲染内容
+    st.markdown(
+        f'<div class="{container_class}">{content}</div>',
+        unsafe_allow_html=True
+    )
+
+def render_chat_container(chat_history: List[Dict], container_type: str = 'doc-chat') -> None:
+    """
+    统一的对话历史渲染函数
+    
+    Args:
+        chat_history: 对话历史列表
+        container_type: 容器类型 ('doc-chat' 或 'excel-chat')
+    """
+    # 添加样式
+    if not hasattr(st.session_state, '_unified_styles_added'):
+        st.markdown(get_unified_content_styles(), unsafe_allow_html=True)
+        st.session_state._unified_styles_added = True
+    
+    # 构建对话内容HTML
+    chat_html = f'<div class="{container_type}-container chat-container-base">'
+    
+    for i, chat in enumerate(chat_history):
+        if chat["role"] == "user":
+            if container_type == 'doc-chat':
+                chat_html += f'<div class="chat-user"><strong>👤 用户第 {(i//2) + 1} 次提问：</strong><br/>{chat["content"]}</div>'
+            else:
+                chat_html += f'<div class="chat-user">👤 {chat["content"]}</div>'
+        else:
+            chat_html += f'<div class="chat-ai"><strong>🤖 AI回答：</strong><br/>{chat["content"]}</div>'
+        
+        if i < len(chat_history) - 1:
+            chat_html += '<div class="chat-divider"></div>'
+    
+    chat_html += '</div>'
+    
+    # 渲染对话内容
+    st.markdown(chat_html, unsafe_allow_html=True)
+
 # 自定义CSS样式（保持原有样式）
 st.markdown("""
 <style>
@@ -1678,17 +1900,104 @@ def main():
     if 'current_sheet' not in st.session_state:
         st.session_state.current_sheet = None
     
-    # 文件上传
-    st.subheader("📁 上传Excel文件")
+    # 初始化文档处理器和会话状态
+    if 'document_processor' not in st.session_state:
+        try:
+            from document_utils import AdvancedDocumentProcessor
+            from document_analyzer import DocumentAnalyzer
+            
+            # 检查依赖
+            analyzer = DocumentAnalyzer()
+            missing_deps = analyzer.get_missing_dependencies()
+            
+            if missing_deps:
+                st.session_state.document_processor = None
+                st.session_state.document_processor_error = f"缺少依赖: {', '.join(missing_deps)}"
+            else:
+                st.session_state.document_processor = AdvancedDocumentProcessor()
+                st.session_state.document_processor_error = None
+                
+        except ImportError as e:
+            st.session_state.document_processor = None
+            st.session_state.document_processor_error = f"导入错误: {str(e)}"
+    if 'document_data' not in st.session_state:
+        st.session_state.document_data = {}
+    if 'document_analysis' not in st.session_state:
+        st.session_state.document_analysis = ""
+    if 'doc_chat_history' not in st.session_state:
+        st.session_state.doc_chat_history = []
+    
+    # 文件上传 - 支持Excel和文档
+    st.subheader("📁 文件上传")
+    
+    # 选择分析模式
+    analysis_mode = st.radio(
+        "🔧 选择分析模式",
+        ["📊 Excel分析", "📄 文档分析"],
+        horizontal=True,
+        key="analysis_mode_selector"
+    )
     
     # 初始化uploaded_file变量
     uploaded_file = None
     
-    # 获取用户已有的Excel文件
-    existing_excel_files = session_manager.get_user_excel_files(session_id)
+    if analysis_mode == "📊 Excel分析":
+        # Excel分析模式
+        st.markdown("### 📊 Excel文件分析")
+        
+        # 获取用户已有的Excel文件
+        existing_excel_files = session_manager.get_user_excel_files(session_id)
+    
+    else:
+        # 文档分析模式
+        st.markdown("### 📄 文档分析 (DOCX/PDF)")
+        
+        # 检查文档处理器是否可用
+        if st.session_state.document_processor is None:
+            error_msg = getattr(st.session_state, 'document_processor_error', '未知错误')
+            
+            st.error(f"❌ 文档分析功能不可用: {error_msg}")
+            
+            with st.expander("🔧 解决方案", expanded=True):
+                st.markdown("""
+                **缺少文档分析依赖库，请按以下步骤安装：**
+                
+                **方式一：自动安装（推荐）**
+                ```bash
+                python install_document_dependencies.py
+                ```
+                
+                **方式二：手动安装**
+                ```bash
+                pip install markitdown[all] python-docx pymupdf PyPDF2 pdfplumber
+                ```
+                
+                **方式三：一键安装最新requirements**
+                ```bash
+                pip install -r requirements.txt
+                ```
+                
+                **常见问题：**
+                - `markitdown[all]`: 包含PDF、DOCX等所有格式支持
+                - 如果安装失败，可能需要升级pip: `pip install --upgrade pip`
+                - Windows用户可能需要安装Visual C++构建工具
+                """)
+                
+                if st.button("🔄 重新检查依赖", type="primary"):
+                    # 清除缓存，重新初始化
+                    if 'document_processor' in st.session_state:
+                        del st.session_state.document_processor
+                    if 'document_processor_error' in st.session_state:
+                        del st.session_state.document_processor_error
+                    st.rerun()
+            
+            return  # 提前退出，不显示后续界面
+        
+        # 获取用户已有的文档文件
+        existing_doc_files = session_manager.get_user_files(session_id, extensions=['.docx', '.pdf'])
     
     # 文件选择方式
-    if existing_excel_files:
+    if analysis_mode == "📊 Excel分析" and existing_excel_files:
         file_option = st.radio(
             "📂 选择文件方式",
             ["选择已有文件", "上传新文件"],
@@ -1746,15 +2055,82 @@ def main():
                 help="支持.xlsx和.xls格式文件",
                 key="new_file_uploader"
             )
+    elif analysis_mode == "📄 文档分析" and existing_doc_files:
+        # 文档分析模式 - 有已有文件
+        file_option = st.radio(
+            "📂 选择文件方式",
+            ["选择已有文档", "上传新文档"],
+            key="doc_file_option_radio"
+        )
+        
+        if file_option == "选择已有文档":
+            # 显示已有文档选择器
+            st.markdown("**📋 您已上传的文档文件：**")
+            
+            # 创建文件选择选项
+            file_options = []
+            file_details = {}
+            
+            for file_info in existing_doc_files:
+                display_text = f"{file_info['display_name']} ({file_info['size_mb']} MB, {file_info['modified_time'].strftime('%Y-%m-%d %H:%M')})"
+                file_options.append(display_text)
+                file_details[display_text] = file_info
+            
+            selected_file_text = st.selectbox(
+                "选择要分析的文档文件",
+                file_options,
+                key="existing_doc_selector"
+            )
+            
+            if selected_file_text and st.button("📄 加载选择的文档", type="primary"):
+                try:
+                    from pathlib import Path
+                    selected_file_info = file_details[selected_file_text]
+                    file_path = Path(selected_file_info['path'])
+                    
+                    with st.spinner("📤 正在加载已有文档..."):
+                        # 加载文档数据
+                        if st.session_state.document_processor:
+                            document_data = st.session_state.document_processor.load_document(str(file_path))
+                            st.session_state.document_data = document_data
+                            
+                            # 保存当前文件信息到session state
+                            st.session_state.current_doc_path = str(file_path)
+                            st.session_state.current_doc_name = selected_file_info['display_name']
+                            
+                            st.success(f"✅ 文档加载成功！文件: {selected_file_info['display_name']}")
+                            st.rerun()
+                        else:
+                            st.error("❌ 文档处理器未初始化")
+                        
+                except Exception as e:
+                    st.error(f"❌ 文档加载错误: {str(e)}")
+        else:
+            # 上传新文档
+            uploaded_file = st.file_uploader(
+                "选择文档文件",
+                type=['docx', 'pdf'],
+                help="支持.docx和.pdf格式文件",
+                key="new_doc_uploader"
+            )
     else:
         # 没有已有文件，直接显示上传
-        st.info("💡 您还没有上传过Excel文件，请上传您的第一个文件")
-        uploaded_file = st.file_uploader(
-            "选择Excel文件",
-            type=['xlsx', 'xls'],
-            help="支持.xlsx和.xls格式文件",
-            key="first_file_uploader"
-        )
+        if analysis_mode == "📊 Excel分析":
+            st.info("💡 您还没有上传过Excel文件，请上传您的第一个文件")
+            uploaded_file = st.file_uploader(
+                "选择Excel文件",
+                type=['xlsx', 'xls'],
+                help="支持.xlsx和.xls格式文件",
+                key="first_file_uploader"
+            )
+        else:
+            st.info("💡 您还没有上传过文档文件，请上传您的第一个文档")
+            uploaded_file = st.file_uploader(
+                "选择文档文件",
+                type=['docx', 'pdf'],
+                help="支持.docx和.pdf格式文件",
+                key="first_doc_uploader"
+            )
     
     # 处理文件上传
     if uploaded_file is not None:
@@ -1769,17 +2145,32 @@ def main():
                         uploaded_file.name
                     )
                     
-                    # 加载Excel数据
-                    excel_data = st.session_state.excel_processor.load_excel(str(file_path))
-                    st.session_state.excel_data = excel_data
+                    if analysis_mode == "📊 Excel分析":
+                        # 加载Excel数据
+                        excel_data = st.session_state.excel_processor.load_excel(str(file_path))
+                        st.session_state.excel_data = excel_data
+                        
+                        sheet_names = list(excel_data.keys())
+                        if sheet_names:
+                            st.session_state.current_sheet = sheet_names[0]
+                        
+                        # 保存当前文件信息到session state
+                        st.session_state.current_file_path = str(file_path)
+                        st.session_state.current_file_name = uploaded_file.name
+                        
+                    else:
+                        # 加载文档数据
+                        if st.session_state.document_processor:
+                            document_data = st.session_state.document_processor.load_document(str(file_path))
+                            st.session_state.document_data = document_data
+                            
+                            # 保存当前文件信息到session state
+                            st.session_state.current_doc_path = str(file_path)
+                            st.session_state.current_doc_name = uploaded_file.name
+                        else:
+                            st.error("❌ 文档处理器未初始化")
+                            return
                     
-                    sheet_names = list(excel_data.keys())
-                    if sheet_names:
-                        st.session_state.current_sheet = sheet_names[0]
-                    
-                    # 保存当前文件信息到session state
-                    st.session_state.current_file_path = str(file_path)
-                    st.session_state.current_file_name = uploaded_file.name
                     st.session_state.last_uploaded_file = uploaded_file.name  # 记录已处理的文件
                     
                     st.success(f"✅ 文件上传成功！保存位置: {file_path.name}")
@@ -1791,9 +2182,14 @@ def main():
             # 文件已经处理过，显示当前状态
             st.info(f"📁 当前文件: {uploaded_file.name}")
     
-    # 主要界面：使用Tabs
-    if st.session_state.excel_data:
+    # 主要界面：根据分析模式显示不同的Tabs
+    if analysis_mode == "📊 Excel分析" and st.session_state.excel_data:
         tab1, tab2, tab3, tab4 = st.tabs(["📋 数据预览与管理", "🤖 AI 智能分析", "💻 代码执行", "🛠️ 数据工具"])
+    elif analysis_mode == "📄 文档分析" and st.session_state.document_data:
+        doc_tab1, doc_tab2, doc_tab3, doc_tab4 = st.tabs(["📄 文档预览", "🤖 AI 文档分析", "💻 代码执行", "🔍 搜索工具"])
+    
+    # Excel分析界面
+    if analysis_mode == "📊 Excel分析" and st.session_state.excel_data:
         
         # Tab 1: 数据预览与管理
         with tab1:
@@ -1814,50 +2210,114 @@ def main():
             if selected_sheet in st.session_state.excel_data:
                 df = st.session_state.excel_data[selected_sheet]
                 
-                # 数据统计卡片
-                col_a, col_b, col_c, col_d = st.columns(4)
-                with col_a:
-                    st.markdown(f'<div class="metric-card"><h3>{len(df)}</h3><p>数据行数</p></div>', unsafe_allow_html=True)
-                with col_b:
-                    st.markdown(f'<div class="metric-card"><h3>{len(df.columns)}</h3><p>数据列数</p></div>', unsafe_allow_html=True)
-                with col_c:
-                    missing_count = df.isnull().sum().sum()
-                    st.markdown(f'<div class="metric-card"><h3>{missing_count}</h3><p>缺失值</p></div>', unsafe_allow_html=True)
-                with col_d:
-                    duplicates = DataAnalyzer.find_duplicates(df)
-                    st.markdown(f'<div class="metric-card"><h3>{len(duplicates)}</h3><p>重复行</p></div>', unsafe_allow_html=True)
+                # 数据统计概览 - 优化版本
+                missing_count = df.isnull().sum().sum()
+                duplicates = DataAnalyzer.find_duplicates(df)
                 
-                # 数据预览
-                st.subheader("📊 数据预览")
-                st.info("💡 此预览仅用于查看和AI理解，实际代码执行请使用'代码执行'标签页")
+                with st.expander(f"📈 数据统计概览 (数据质量: {len(duplicates)} 重复行, {missing_count} 缺失值)", expanded=True):
+                    # 基础统计卡片
+                    col_a, col_b, col_c, col_d = st.columns(4)
+                    with col_a:
+                        st.markdown(f'<div class="metric-card"><h3>{len(df)}</h3><p>数据行数</p></div>', unsafe_allow_html=True)
+                    with col_b:
+                        st.markdown(f'<div class="metric-card"><h3>{len(df.columns)}</h3><p>数据列数</p></div>', unsafe_allow_html=True)
+                    with col_c:
+                        st.markdown(f'<div class="metric-card"><h3>{missing_count}</h3><p>缺失值</p></div>', unsafe_allow_html=True)
+                    with col_d:
+                        st.markdown(f'<div class="metric-card"><h3>{len(duplicates)}</h3><p>重复行</p></div>', unsafe_allow_html=True)
+                    
+                    # 详细数据质量报告
+                    if missing_count > 0 or len(duplicates) > 0:
+                        st.markdown("### 📋 详细数据质量报告")
+                        
+                        if missing_count > 0:
+                            st.markdown("**🔍 缺失值分布:**")
+                            missing_series = df.isnull().sum()
+                            missing_df = pd.DataFrame({
+                                '列名': missing_series.index,
+                                '缺失数量': missing_series.values
+                            })
+                            missing_df = missing_df[missing_df['缺失数量'] > 0]
+                            missing_df['缺失比例(%)'] = (missing_df['缺失数量'] / len(df) * 100).round(2)
+                            st.dataframe(missing_df, use_container_width=True)
+                        
+                        if len(duplicates) > 0:
+                            st.markdown(f"**🔄 重复行信息:** 发现 {len(duplicates)} 个重复行")
+                            if st.button("👁️ 查看重复行", key="view_duplicates"):
+                                st.dataframe(duplicates.head(10), use_container_width=True)
+                    
+                    # 数据类型统计
+                    st.markdown("### 📊 数据类型分布")
+                    dtype_counts = df.dtypes.value_counts()
+                    dtype_df = pd.DataFrame({
+                        '数据类型': dtype_counts.index.astype(str),
+                        '列数': dtype_counts.values
+                    })
+                    
+                    col_dtype_table, col_dtype_chart = st.columns([1, 1])
+                    with col_dtype_table:
+                        st.dataframe(dtype_df, use_container_width=True)
+                    with col_dtype_chart:
+                        # 简单的数据类型分布图
+                        st.bar_chart(dtype_df.set_index('数据类型'))
                 
-                # 显示数据表格 - 添加错误处理
-                try:
-                    # 尝试显示前20行数据
-                    preview_df = df.head(20).copy()
+                # 数据预览 - 优化版本
+                df_shape = df.shape
+                total_cells = df_shape[0] * df_shape[1]
+                
+                with st.expander(f"📊 数据预览 ({df_shape[0]} 行 × {df_shape[1]} 列，共 {total_cells:,} 个单元格)", expanded=True):
+                    st.info("💡 此预览仅用于查看和AI理解，实际代码执行请使用'代码执行'标签页")
                     
-                    # 确保所有列的数据类型一致，避免pyarrow错误
-                    for col in preview_df.columns:
-                        if preview_df[col].dtype == 'object':
-                            # 将混合类型的object列转换为字符串
-                            preview_df[col] = preview_df[col].astype(str)
-                    
-                    st.dataframe(preview_df, use_container_width=True)
-                    
-                except Exception as e:
-                    st.warning(f"⚠️ 数据预览显示出现问题，使用文本格式展示")
-                    st.write(f"**错误信息**: {str(e)}")
-                    
-                    # 回退到文本格式显示
+                    # 显示数据表格 - 添加错误处理
                     try:
-                        preview_text = df.head(10).to_string()
-                        st.text(preview_text)
-                    except Exception as e2:
-                        st.error(f"❌ 无法显示数据预览: {str(e2)}")
-                        st.write("**数据基本信息:**")
-                        st.write(f"- 行数: {len(df)}")
-                        st.write(f"- 列数: {len(df.columns)}")
-                        st.write(f"- 列名: {list(df.columns)}")
+                        # 尝试显示前20行数据
+                        preview_df = df.head(20).copy()
+                        
+                        # 确保所有列的数据类型一致，避免pyarrow错误
+                        for col in preview_df.columns:
+                            if preview_df[col].dtype == 'object':
+                                # 将混合类型的object列转换为字符串
+                                preview_df[col] = preview_df[col].astype(str)
+                        
+                        st.dataframe(preview_df, use_container_width=True)
+                        
+                        # 添加数据导出功能
+                        col_export_preview, col_export_full = st.columns(2)
+                        
+                        with col_export_preview:
+                            if st.button("📥 导出预览数据", key=f"export_preview_{st.session_state.current_sheet}"):
+                                st.download_button(
+                                    label="💾 下载预览数据(Excel)",
+                                    data=preview_df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig'),
+                                    file_name=f"{st.session_state.current_sheet}_预览_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv",
+                                    key=f"download_preview_{st.session_state.current_sheet}"
+                                )
+                        
+                        with col_export_full:
+                            if st.button("📥 导出完整数据", key=f"export_full_{st.session_state.current_sheet}"):
+                                st.download_button(
+                                    label="💾 下载完整数据(Excel)",
+                                    data=df.to_csv(index=False, encoding='utf-8-sig').encode('utf-8-sig'),
+                                    file_name=f"{st.session_state.current_sheet}_完整_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                                    mime="text/csv",
+                                    key=f"download_full_{st.session_state.current_sheet}"
+                                )
+                        
+                    except Exception as e:
+                        st.warning(f"⚠️ 数据预览显示出现问题，使用文本格式展示")
+                        st.write(f"**错误信息**: {str(e)}")
+                        
+                        # 回退到文本格式显示
+                        try:
+                            preview_text = df.head(10).to_string()
+                            st.text(preview_text)
+                        except Exception as e2:
+                            st.error(f"❌ 无法显示数据预览: {str(e2)}")
+                            st.write("**数据基本信息:**")
+                            st.write(f"- 行数: {len(df)}")
+                            st.write(f"- 列数: {len(df.columns)}")
+                            st.write(f"- 列名: {list(df.columns)}")
         
         # Tab 2: AI智能分析（保持原有功能）
         with tab2:
@@ -1903,8 +2363,55 @@ def main():
             # 显示快速分析结果
             if 'quick_excel_analysis' in st.session_state and st.session_state.quick_excel_analysis:
                 st.subheader("📊 Excel结构分析结果")
-                with st.expander("📋 查看详细分析", expanded=True):
-                    st.markdown(st.session_state.quick_excel_analysis)
+                
+                # 计算统计信息
+                analysis_content = st.session_state.quick_excel_analysis
+                char_count = len(analysis_content)
+                word_count = len(analysis_content.split())
+                line_count = analysis_content.count('\n') + 1
+                
+                # 使用折叠框显示，标题包含统计信息
+                with st.expander(f"📋 查看详细分析 (共 {word_count} 词，{char_count} 字符，{line_count} 行)", expanded=True):
+                     # 使用统一的容器渲染函数
+                     render_content_container(analysis_content, 'excel-structure')
+                     
+                     # 添加操作按钮
+                     col_download, col_copy, col_refresh = st.columns(3)
+                    
+                     with col_download:
+                         if st.button("📥 下载分析结果", key="download_excel_structure"):
+                             # 生成下载内容
+                             download_content = f"""# Excel结构分析结果
+                            
+                             文件名: {getattr(st.session_state, 'current_file_name', '未知文件')}
+                             生成时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+{analysis_content}
+"""
+                             st.download_button(
+                                 label="💾 下载为.md文件",
+                                 data=download_content,
+                                 file_name=f"Excel结构分析_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                                 mime="text/markdown",
+                                 key="download_excel_structure_md"
+                             )
+                    
+                     with col_copy:
+                         if st.button("📋 复制到剪贴板", key="copy_excel_structure"):
+                             st.success("✅ 内容已复制到剪贴板")
+                             # 使用JavaScript复制到剪贴板
+                             copy_js = f"""
+                             <script>
+                             navigator.clipboard.writeText(`{analysis_content.replace('`', '\\`')}`);
+                             </script>
+"""
+                             st.markdown(copy_js, unsafe_allow_html=True)
+                    
+                     with col_refresh:
+                         if st.button("🔄 重新分析结构", key="refresh_excel_structure"):
+                            if 'quick_excel_analysis' in st.session_state:
+                                del st.session_state.quick_excel_analysis
+                                st.rerun()
                 
                 # 功能说明和提示
                 st.info("📝 **智能分析说明**：\n"
@@ -1928,6 +2435,57 @@ def main():
             else:
                 # 初始化AI分析器
                 ai_analyzer = EnhancedAIAnalyzer(api_key, base_url, selected_model)
+                
+                # 显示已有的深度分析结果
+                if 'excel_analysis' in st.session_state and st.session_state.excel_analysis:
+                    # 计算分析结果的统计信息
+                    analysis_content = st.session_state.excel_analysis
+                    char_count = len(analysis_content)
+                    word_count = len(analysis_content.split())
+                    line_count = analysis_content.count('\n') + 1
+                    
+                    # 使用折叠框显示深度分析结果
+                    with st.expander(f"🎯 AI深度分析结果 (共 {word_count} 词，{char_count} 字符，{line_count} 行)", expanded=True):
+                        # 使用统一的容器渲染函数
+                        render_content_container(analysis_content, 'excel-ai')
+                        
+                        # 添加操作按钮
+                        col_download_ai, col_copy_ai, col_refresh_ai = st.columns(3)
+                        
+                        with col_download_ai:
+                            if st.button("📥 下载AI分析", key="download_ai_analysis"):
+                                # 生成下载内容
+                                download_content = f"""# Excel AI深度分析报告
+                                
+文件名: {getattr(st.session_state, 'current_file_name', '未知文件')}
+分析时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+模型: {selected_model}
+
+{analysis_content}
+"""
+                                st.download_button(
+                                    label="💾 下载为.md文件",
+                                    data=download_content,
+                                    file_name=f"Excel_AI分析_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                                    mime="text/markdown",
+                                    key="download_ai_analysis_md"
+                                )
+                        
+                        with col_copy_ai:
+                            if st.button("📋 复制分析结果", key="copy_ai_analysis"):
+                                st.success("✅ AI分析结果已复制到剪贴板")
+                                # 使用JavaScript复制到剪贴板
+                                copy_js = f"""
+                                <script>
+                                navigator.clipboard.writeText(`{analysis_content.replace('`', '\\`')}`);
+                                </script>
+                                """
+                                st.markdown(copy_js, unsafe_allow_html=True)
+                        
+                        with col_refresh_ai:
+                            if st.button("🔄 重新生成分析", key="refresh_ai_analysis"):
+                                st.session_state.excel_analysis = ""
+                                st.rerun()
                 
                 # AI分析控制
                 col_analyze, col_refresh = st.columns([3, 1])
@@ -1962,6 +2520,7 @@ def main():
                                 "role": "assistant",
                                 "content": f"**📋 Excel深度分析报告**\n\n{combined_analysis}"
                             })
+                            st.rerun()
                 
                 with col_refresh:
                     if st.button("🔄 重新分析", use_container_width=True):
@@ -2001,21 +2560,59 @@ def main():
                                 })
                             st.rerun()
                 
-                # 聊天历史显示
-                st.subheader("💬 AI 对话历史")
-                chat_container = st.container()
-                with chat_container:
-                    st.markdown('<div class="chat-container">', unsafe_allow_html=True)
-                    for chat in st.session_state.chat_history:
-                        if chat["role"] == "user":
-                            st.markdown(f'<div class="user-message">👤 {chat["content"]}</div>', unsafe_allow_html=True)
-                        else:
-                            st.markdown(f'<div class="ai-message">🤖 {chat["content"]}</div>', unsafe_allow_html=True)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                # 聊天历史显示 - 优化版本
+                if st.session_state.chat_history:
+                    # 计算对话历史统计信息
+                    total_conversations = len(st.session_state.chat_history)
+                    user_messages = len([chat for chat in st.session_state.chat_history if chat["role"] == "user"])
+                    ai_messages = len([chat for chat in st.session_state.chat_history if chat["role"] == "assistant"])
+                    
+                    with st.expander(f"💬 AI对话历史 (共 {total_conversations} 条消息: {user_messages} 个问题, {ai_messages} 个回答)", expanded=False):
+                        # 使用统一的对话容器渲染函数
+                        render_chat_container(st.session_state.chat_history, 'excel-chat')
+                        
+                        # 对话历史操作按钮
+                        col_export_chat, col_clear_chat = st.columns(2)
+                        
+                        with col_export_chat:
+                            if st.button("📥 导出对话历史", key="export_chat_history"):
+                                # 生成对话历史文本
+                                chat_text = f"""# Excel AI对话历史
+                                
+文件名: {getattr(st.session_state, 'current_file_name', '未知文件')}
+导出时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+总对话数: {total_conversations} 条
+
+"""
+                                for i, chat in enumerate(st.session_state.chat_history, 1):
+                                    role_name = "用户" if chat["role"] == "user" else "AI助手"
+                                    chat_text += f"""
+## {i}. {role_name}
+
+{chat["content"]}
+
+"""
+                                
+                                st.download_button(
+                                    label="💾 下载为.md文件",
+                                    data=chat_text,
+                                    file_name=f"Excel对话历史_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                                    mime="text/markdown",
+                                    key="download_chat_history_md"
+                                )
+                        
+                        with col_clear_chat:
+                            if st.button("🗑️ 清空对话历史", key="clear_chat_history"):
+                                st.session_state.chat_history = []
+                                st.rerun()
+                
+                else:
+                    st.info("💬 还没有AI对话记录，请开始提问或使用快速分析功能")
                 
                 # 用户输入
+                st.subheader("💭 向AI提问")
                 user_input = st.text_area(
-                    "💭 向AI提问",
+                    "输入您的问题",
                     placeholder="例如：分析销售趋势、查找数据异常、提供业务建议等...",
                     height=80,
                     key="ai_chat_input"
@@ -2044,8 +2641,10 @@ def main():
                             st.rerun()
                 
                 with col_clear:
-                    if st.button("🗑️ 清空对话", use_container_width=True):
-                        st.session_state.chat_history = []
+                    if st.button("🗑️ 清空输入", use_container_width=True):
+                        # 清空输入框（通过重置key）
+                        if 'ai_chat_input' in st.session_state:
+                            del st.session_state.ai_chat_input
                         st.rerun()
         
         # Tab 3: 代码执行（简化版）
@@ -2923,9 +3522,705 @@ print("="*50)
             
             else:
                 st.info("📋 请先在'数据预览'标签中选择工作表")
+    
+    # 文档分析界面
+    elif analysis_mode == "📄 文档分析" and st.session_state.document_data:
+        # Tab 1: 文档预览
+        with doc_tab1:
+            st.header("📄 文档预览与管理")
+            
+            file_info = st.session_state.document_data.get('file_info', {})
+            st.success(f"✅ 成功载入文档: {file_info.get('name', 'Unknown')}")
+            
+            # 文档基本信息卡片
+            col_a, col_b, col_c, col_d = st.columns(4)
+            with col_a:
+                st.markdown(f'<div class="metric-card"><h3>{file_info.get("type", "Unknown").upper()}</h3><p>文档类型</p></div>', unsafe_allow_html=True)
+            with col_b:
+                st.markdown(f'<div class="metric-card"><h3>{file_info.get("size_mb", 0)}</h3><p>文件大小(MB)</p></div>', unsafe_allow_html=True)
+            with col_c:
+                preview_data = st.session_state.document_data.get('preview_data', {})
+                page_count = preview_data.get('page_count', 0)
+                st.markdown(f'<div class="metric-card"><h3>{page_count}</h3><p>估算页数</p></div>', unsafe_allow_html=True)
+            with col_d:
+                word_count = preview_data.get('word_count', 0)
+                st.markdown(f'<div class="metric-card"><h3>{word_count}</h3><p>字数统计</p></div>', unsafe_allow_html=True)
+            
+            # 文档预览
+            st.subheader("📝 文档内容预览")
+            st.info("💡 此预览已清除格式，保留结构，限制前10页内容，用于AI理解")
+            
+            try:
+                if st.session_state.document_processor:
+                    preview_content = st.session_state.document_processor.get_document_preview(max_chars=20000)
+                    
+                    if preview_content and preview_content != "请先加载文档":
+                        # 计算内容统计信息
+                        char_count = len(preview_content)
+                        word_count = len(preview_content.split())
+                        line_count = len(preview_content.split('\n'))
+                        
+                        # 使用可折叠的下拉框显示预览内容
+                        with st.expander(f"📄 查看文档内容 ({word_count:,} 词, {char_count:,} 字符, {line_count} 行)", expanded=False):
+                            st.markdown("### MarkItDown 清洗结果")
+                            st.markdown("此内容已格式化为Markdown，便于AI理解和分析：")
+                            
+                            # 使用统一的容器渲染函数
+                            render_content_container(preview_content, 'document-preview')
+                            
+                            # 添加一些操作按钮
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                if st.button("📋 复制内容"):
+                                    st.info("💡 请使用浏览器的选择和复制功能")
+                            with col2:
+                                st.download_button(
+                                    label="💾 下载预览",
+                                    data=preview_content,
+                                    file_name=f"{file_info.get('name', 'document')}_preview.md",
+                                    mime="text/markdown"
+                                )
+                            with col3:
+                                if st.button("🔄 刷新预览"):
+                                    st.rerun()
+                    else:
+                        st.warning("⚠️ 无法生成文档预览")
+                else:
+                    st.error("❌ 文档处理器不可用")
+                    
+            except Exception as e:
+                st.error(f"❌ 预览生成失败: {str(e)}")
+            
+            # 结构化分析摘要
+            st.subheader("🏗️ 文档结构摘要")
+            try:
+                if st.session_state.document_processor:
+                    structure_summary = st.session_state.document_processor.get_structure_summary()
+                    if structure_summary and structure_summary != "请先加载文档":
+                        # 计算结构摘要的统计信息
+                        summary_lines = len(structure_summary.split('\n'))
+                        summary_chars = len(structure_summary)
+                        
+                        with st.expander(f"📋 查看详细结构分析 ({summary_lines} 行)", expanded=True):
+                            st.markdown("### 文档结构化分析结果")
+                            st.markdown("基于原始文档格式提取的结构信息：")
+                            
+                            # 使用统一的容器渲染函数
+                            render_content_container(structure_summary, 'document-structure')
+                            
+                            # 添加操作按钮
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                st.download_button(
+                                    label="💾 下载结构分析",
+                                    data=structure_summary,
+                                    file_name=f"{file_info.get('name', 'document')}_structure.md",
+                                    mime="text/markdown"
+                                )
+                            with col2:
+                                if st.button("🔄 重新分析结构"):
+                                    st.rerun()
+                    else:
+                        st.warning("⚠️ 无法生成结构摘要")
+                else:
+                    st.error("❌ 文档处理器不可用")
+            except Exception as e:
+                st.error(f"❌ 结构分析失败: {str(e)}")
+        
+        # Tab 2: AI文档分析
+        with doc_tab2:
+            st.header("🤖 AI 文档智能分析")
+            
+            # 轻量级文档结构分析（无需API）
+            st.subheader("📋 文档结构化分析")
+            st.info("💡 即使没有配置AI API，您也可以获得文档的结构化分析")
+            
+            # 添加分析按钮和结果显示
+            col_doc_analyze, col_doc_clear = st.columns([3, 1])
+            
+            with col_doc_analyze:
+                if st.button("🔍 结构化分析文档", type="secondary", use_container_width=True):
+                    if hasattr(st.session_state, 'current_doc_path') and st.session_state.current_doc_path:
+                        try:
+                            with st.spinner("📊 正在进行文档结构化分析..."):
+                                # 获取已有的分析结果
+                                structure_analysis = st.session_state.document_data.get('structure_analysis', {})
+                                if structure_analysis:
+                                    # 格式化结构分析结果
+                                    analysis_text = "# 📊 文档结构化分析结果\n\n"
+                                    
+                                    # 基本信息
+                                    file_info = st.session_state.document_data.get('file_info', {})
+                                    analysis_text += f"**文件名**: {file_info.get('name', 'Unknown')}\n"
+                                    analysis_text += f"**文档类型**: {file_info.get('type', 'Unknown').upper()}\n"
+                                    analysis_text += f"**文件大小**: {file_info.get('size_mb', 0)} MB\n\n"
+                                    
+                                    # 结构特征
+                                    if file_info.get('type') == 'docx':
+                                        analysis_text += "## 📋 DOCX文档结构\n"
+                                        analysis_text += f"- **段落数**: {structure_analysis.get('total_paragraphs', 0)}\n"
+                                        analysis_text += f"- **表格数**: {structure_analysis.get('tables_count', 0)}\n"
+                                        analysis_text += f"- **图片数**: {structure_analysis.get('images_count', 0)}\n"
+                                    elif file_info.get('type') == 'pdf':
+                                        analysis_text += "## 📋 PDF文档结构\n"
+                                        analysis_text += f"- **页数**: {structure_analysis.get('total_pages', 0)}\n"
+                                        analysis_text += f"- **图片数**: {structure_analysis.get('images_count', 0)}\n"
+                                    
+                                    # 标题层级
+                                    headings = structure_analysis.get('headings', {})
+                                    if headings:
+                                        analysis_text += "\n## 🏷️ 标题层级结构\n"
+                                        for level in sorted(headings.keys()):
+                                            heading_list = headings[level]
+                                            analysis_text += f"### {level}级标题 (共{len(heading_list)}个)\n"
+                                            for heading in heading_list[:3]:
+                                                text = heading.get('text', str(heading))[:100]
+                                                analysis_text += f"- {text}\n"
+                                            if len(heading_list) > 3:
+                                                analysis_text += f"- ... 还有{len(heading_list) - 3}个\n"
+                                    
+                                    # 字体使用
+                                    fonts = structure_analysis.get('fonts_used', [])
+                                    if fonts:
+                                        analysis_text += f"\n## 🔤 字体使用情况\n"
+                                        analysis_text += f"- **字体种类数**: {len(fonts)}\n"
+                                        analysis_text += f"- **主要字体**: {', '.join(fonts[:5])}\n"
+                                    
+                                    st.session_state.quick_doc_analysis = analysis_text
+                                    st.success("✅ 文档结构化分析完成！")
+                                    st.rerun()
+                                else:
+                                    st.error("❌ 无法获取结构分析数据")
+                        except Exception as e:
+                            st.error(f"❌ 结构分析失败: {str(e)}")
+                    else:
+                        st.warning("⚠️ 请先上传文档文件")
+            
+            with col_doc_clear:
+                if st.button("🗑️ 清除分析", use_container_width=True):
+                    if 'quick_doc_analysis' in st.session_state:
+                        del st.session_state.quick_doc_analysis
+                        st.rerun()
+            
+            # 显示结构分析结果
+            if 'quick_doc_analysis' in st.session_state and st.session_state.quick_doc_analysis:
+                analysis_content = st.session_state.quick_doc_analysis
+                analysis_lines = len(analysis_content.split('\n'))
+                analysis_words = len(analysis_content.split())
+                
+                st.subheader("📊 文档结构分析结果")
+                with st.expander(f"📋 查看详细分析 ({analysis_words} 词, {analysis_lines} 行)", expanded=True):
+                    st.markdown("### 结构化分析报告")
+                    st.markdown("基于文档原始格式提取的完整结构信息：")
+                    
+                    # 以markdown格式渲染分析内容
+                    st.markdown(analysis_content)
+                    
+                    # 添加操作按钮
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.download_button(
+                            label="💾 下载分析报告",
+                            data=analysis_content,
+                            file_name=f"{file_info.get('name', 'document')}_analysis.md",
+                            mime="text/markdown"
+                        )
+                    with col2:
+                        if st.button("📋 复制分析结果"):
+                            st.info("💡 请使用浏览器的选择和复制功能")
+                
+                # 功能说明和提示
+                st.info("📝 **结构化分析说明**：\n"
+                       "- 📄 **原始格式解析**：直接从文档原始格式提取结构信息\n"
+                       "- 🏷️ **标题层级识别**：自动识别不同级别的标题和章节\n"
+                       "- 🔤 **字体样式分析**：统计文档中使用的字体类型\n"
+                       "- 📊 **内容组织结构**：分析段落、表格、图片的分布")
+                
+                # 如果有API配置，提供将分析结果作为AI分析基础的选项
+                if api_key:
+                    st.success("💡 **AI分析提示**：上述结构分析将自动作为深度AI分析的基础信息，提高AI理解准确性！")
+            
+            # 分隔线
+            st.markdown("---")
+            
+            # 深度AI分析功能
+            st.subheader("🧠 深度AI文档分析")
+            
+            if not api_key:
+                st.warning("⚠️ 请在侧边栏配置OpenAI API Key以使用深度AI分析功能")
+            else:
+                # 初始化文档AI分析器
+                try:
+                    from document_ai_analyzer import EnhancedDocumentAIAnalyzer
+                    doc_ai_analyzer = EnhancedDocumentAIAnalyzer(api_key, base_url, selected_model)
+                    
+                    # AI分析控制
+                    col_doc_ai_analyze, col_doc_ai_refresh = st.columns([3, 1])
+                    
+                    with col_doc_ai_analyze:
+                        if st.button("🔍 开始AI深度文档分析", type="primary", use_container_width=True):
+                            with st.spinner("🧠 AI正在深度分析您的文档..."):
+                                # 获取文档结构分析结果
+                                structure_info = ""
+                                if 'quick_doc_analysis' in st.session_state and st.session_state.quick_doc_analysis:
+                                    structure_info = st.session_state.quick_doc_analysis
+                                
+                                # 进行AI深度分析
+                                analysis = doc_ai_analyzer.analyze_document_structure(st.session_state.document_data)
+                                
+                                # 构建完整的分析报告
+                                if structure_info:
+                                    combined_analysis = f"""## 📋 文档结构解析
+
+{structure_info}
+
+---
+
+## 🎯 AI深度文档分析
+
+{analysis}"""
+                                else:
+                                    combined_analysis = analysis
+                                
+                                st.session_state.document_analysis = combined_analysis
+                                st.session_state.doc_chat_history.append({
+                                    "role": "assistant",
+                                    "content": f"**📋 文档深度分析报告**\n\n{combined_analysis}"
+                                })
+                    
+                    with col_doc_ai_refresh:
+                        if st.button("🔄 重新分析", use_container_width=True):
+                            st.session_state.document_analysis = ""
+                            st.session_state.doc_chat_history = []
+                            st.rerun()
+                    
+                    # 快速操作按钮
+                    st.subheader("⚡ 智能文档分析")
+                    col_doc_quick1, col_doc_quick2 = st.columns(2)
+                    
+                    doc_quick_actions = [
+                        ("🎯 文档用途识别", "请分析这个文档的用途和类型，识别其主要功能和应用场景"),
+                        ("📋 内容主题分析", "请分析文档的主要内容主题，识别核心议题和关键信息"),
+                        ("🏗️ 结构特点分析", "请分析文档的组织结构特点，评估其逻辑性和可读性"),
+                        ("🔍 关键信息提取", "请识别文档中的关键信息，如重要日期、金额、人名、条款等")
+                    ]
+                    
+                    for i, (title, prompt) in enumerate(doc_quick_actions):
+                        col = col_doc_quick1 if i % 2 == 0 else col_doc_quick2
+                        with col:
+                            if st.button(title, use_container_width=True, key=f"doc_quick_{i}"):
+                                st.session_state.doc_chat_history.append({
+                                    "role": "user",
+                                    "content": prompt
+                                })
+                                
+                                with st.spinner("🤔 AI正在分析..."):
+                                    response = doc_ai_analyzer.chat_with_document(
+                                        prompt,
+                                        st.session_state.document_data,
+                                        st.session_state.document_analysis
+                                    )
+                                    st.session_state.doc_chat_history.append({
+                                        "role": "assistant",
+                                        "content": response
+                                    })
+                                st.rerun()
+                    
+                    # 显示分析结果
+                    if st.session_state.document_analysis:
+                        ai_analysis = st.session_state.document_analysis
+                        ai_lines = len(ai_analysis.split('\n'))
+                        ai_words = len(ai_analysis.split())
+                        ai_chars = len(ai_analysis)
+                        
+                        st.subheader("📊 AI文档分析结果")
+                        with st.expander(f"📋 查看完整分析报告 ({ai_words:,} 词, {ai_chars:,} 字符, {ai_lines} 行)", expanded=True):
+                            st.markdown("### AI深度文档分析报告")
+                            st.markdown("由AI结合结构分析和内容理解生成的完整分析：")
+                            
+                            # 使用统一的容器渲染函数
+                            render_content_container(ai_analysis, 'ai-analysis')
+                            
+                            # 添加操作按钮
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.download_button(
+                                    label="💾 下载AI报告",
+                                    data=ai_analysis,
+                                    file_name=f"{file_info.get('name', 'document')}_ai_analysis.md",
+                                    mime="text/markdown"
+                                )
+                            with col2:
+                                if st.button("📋 复制AI分析"):
+                                    st.info("💡 请使用浏览器的选择和复制功能")
+                            with col3:
+                                if st.button("🔄 刷新AI分析"):
+                                    st.rerun()
+                    
+                    # 对话历史
+                    if st.session_state.doc_chat_history:
+                        chat_count = len(st.session_state.doc_chat_history)
+                        st.subheader("💬 AI对话历史")
+                        
+                        with st.expander(f"💬 查看对话记录 (共 {chat_count} 条)", expanded=False):
+                            st.markdown("### 文档分析对话记录")
+                            st.markdown("您与AI关于文档分析的完整对话：")
+                            
+                            # 使用统一的对话容器渲染函数
+                            render_chat_container(st.session_state.doc_chat_history, 'doc-chat')
+                            
+                            # 导出对话历史
+                            chat_export = "\n\n".join([
+                                f"{'👤 用户: ' if chat['role'] == 'user' else '🤖 AI: '}{chat['content']}"
+                                for chat in st.session_state.doc_chat_history
+                            ])
+                            
+                            st.download_button(
+                                label="💾 下载对话记录",
+                                data=chat_export,
+                                file_name=f"{file_info.get('name', 'document')}_chat_history.md",
+                                mime="text/markdown"
+                            )
+                    
+                    # 用户输入
+                    user_input = st.text_area(
+                        "💭 向AI提问",
+                        placeholder="例如：分析文档重点、查找关键信息、提供改进建议等...",
+                        height=80,
+                        key="doc_ai_chat_input"
+                    )
+                    
+                    col_doc_send, col_doc_clear_chat = st.columns([1, 1])
+                    
+                    with col_doc_send:
+                        if st.button("📤 发送", type="primary", use_container_width=True):
+                            if user_input.strip():
+                                st.session_state.doc_chat_history.append({
+                                    "role": "user",
+                                    "content": user_input
+                                })
+                                
+                                with st.spinner("🤔 AI正在思考..."):
+                                    response = doc_ai_analyzer.chat_with_document(
+                                        user_input,
+                                        st.session_state.document_data,
+                                        st.session_state.document_analysis
+                                    )
+                                    st.session_state.doc_chat_history.append({
+                                        "role": "assistant",
+                                        "content": response
+                                    })
+                                st.rerun()
+                    
+                    with col_doc_clear_chat:
+                        if st.button("🗑️ 清空对话", use_container_width=True):
+                            st.session_state.doc_chat_history = []
+                            st.rerun()
+                            
+                except ImportError:
+                    st.error("❌ 无法导入文档AI分析器，请确保document_ai_analyzer.py文件存在")
+                except Exception as e:
+                    st.error(f"❌ AI分析器初始化失败: {str(e)}")
+        
+        # Tab 3: 代码执行
+        with doc_tab3:
+            st.header("💻 文档代码执行")
+            
+            if not api_key:
+                st.warning("⚠️ AI代码生成需要配置API Key")
+            else:
+                # AI代码生成助手
+                col_doc_ai, col_doc_manual = st.columns([1, 1])
+                
+                with col_doc_ai:
+                    if st.button("🤖 AI助手", use_container_width=True, help="使用AI生成文档处理代码"):
+                        st.session_state.show_doc_ai_helper = not st.session_state.get('show_doc_ai_helper', False)
+                        st.rerun()
+                
+                # AI代码生成助手
+                if st.session_state.get('show_doc_ai_helper', False):
+                    with st.expander("🤖 AI文档代码生成助手", expanded=True):
+                        try:
+                            from document_ai_analyzer import EnhancedDocumentAIAnalyzer
+                            doc_ai_analyzer = EnhancedDocumentAIAnalyzer(api_key, base_url, selected_model)
+                            
+                            task_description = st.text_area(
+                                "描述您需要完成的文档处理任务",
+                                placeholder="例如：搜索所有包含'合同编号'的段落并提取上下文、分析文档中的关键信息、生成文档摘要等...",
+                                height=100,
+                                key="doc_ai_task"
+                            )
+                            
+                            if st.button("🔮 AI生成代码", type="primary", use_container_width=True):
+                                if task_description.strip():
+                                    with st.spinner("🤖 AI正在生成代码..."):
+                                        generated_code = doc_ai_analyzer.generate_document_code_solution(
+                                            task_description,
+                                            st.session_state.document_data,
+                                            st.session_state.current_doc_name
+                                        )
+                                        st.session_state.doc_generated_code = generated_code
+                                        st.success("✅ 代码生成完成！")
+                                        st.rerun()
+                                else:
+                                    st.warning("⚠️ 请描述您的任务需求")
+                        except ImportError:
+                            st.error("❌ 无法导入文档AI分析器")
+                        except Exception as e:
+                            st.error(f"❌ AI代码生成失败: {str(e)}")
+            
+            # 显示生成的代码
+            if 'doc_generated_code' in st.session_state:
+                st.subheader("🔮 AI生成的代码")
+                st.code(st.session_state.doc_generated_code, language='python')
+                
+                if st.button("📋 复制到编辑器", use_container_width=True):
+                    st.session_state.doc_code_input = st.session_state.doc_generated_code
+                    st.success("✅ 代码已复制到编辑器")
+                    st.rerun()
+            
+            # 代码编辑器
+            st.subheader("📝 Python代码编辑器")
+            
+            # 提供示例代码
+            default_doc_code = '''# 文档分析示例代码
+from document_analyzer import DocumentAnalyzer
+from document_utils import AdvancedDocumentProcessor
+
+# 初始化处理器
+processor = AdvancedDocumentProcessor()
+
+# 分析文档（文件路径会自动替换）
+doc_path = "current_document_path"
+analysis_result = processor.load_document(doc_path)
+
+# 获取文档基本信息
+file_info = analysis_result["file_info"]
+print(f"文档名: {file_info['name']}")
+print(f"类型: {file_info['type']}")
+print(f"大小: {file_info['size_mb']} MB")
+
+# 搜索关键词示例
+keyword = "重要信息"  # 修改为您要搜索的关键词
+search_results = processor.search_content(keyword, context_lines=2)
+
+print(f"\\n=== 搜索关键词: {keyword} ===")
+for i, result in enumerate(search_results, 1):
+    print(f"结果 {i}:")
+    print(f"  位置: 第{result['line_number']}行")
+    print(f"  内容: {result['matched_line']}")
+    print(f"  上下文:\\n{result['context']}")
+    print("-" * 50)
+
+# 导出分析结果
+json_file, md_file = processor.export_analysis_result()
+print(f"\\n分析结果已导出:")
+print(f"JSON文件: {json_file}")
+print(f"报告文件: {md_file}")
+'''
+            
+            doc_code_input = st.text_area(
+                "输入Python代码",
+                value=st.session_state.get('doc_code_input', default_doc_code),
+                height=300,
+                key="doc_code_editor"
+            )
+            
+            if st.button("🚀 执行文档分析代码", type="primary", use_container_width=True):
+                if doc_code_input.strip():
+                    with st.spinner("🔄 正在执行代码..."):
+                        try:
+                            # 创建安全的执行环境
+                            exec_globals = {
+                                '__builtins__': __builtins__,
+                                'print': print,
+                                'len': len,
+                                'str': str,
+                                'int': int,
+                                'float': float,
+                                'list': list,
+                                'dict': dict,
+                                'enumerate': enumerate,
+                                'range': range,
+                            }
+                            
+                            # 导入文档处理模块
+                            try:
+                                from document_analyzer import DocumentAnalyzer
+                                from document_utils import AdvancedDocumentProcessor, DocumentSearchEngine
+                                exec_globals['DocumentAnalyzer'] = DocumentAnalyzer
+                                exec_globals['AdvancedDocumentProcessor'] = AdvancedDocumentProcessor
+                                exec_globals['DocumentSearchEngine'] = DocumentSearchEngine
+                            except ImportError as e:
+                                st.error(f"❌ 导入文档处理模块失败: {str(e)}")
+                                return
+                            
+                            # 替换当前文档路径
+                            if hasattr(st.session_state, 'current_doc_path'):
+                                doc_code_input = doc_code_input.replace('current_document_path', st.session_state.current_doc_path)
+                                doc_code_input = doc_code_input.replace('"current_document_path"', f'"{st.session_state.current_doc_path}"')
+                            
+                            # 执行代码
+                            exec_output = io.StringIO()
+                            
+                            # 重定向print输出
+                            import sys
+                            old_stdout = sys.stdout
+                            sys.stdout = exec_output
+                            
+                            try:
+                                exec(doc_code_input, exec_globals)
+                                result = exec_output.getvalue()
+                                
+                                if result:
+                                    st.subheader("📋 执行结果")
+                                    st.text(result)
+                                else:
+                                    st.success("✅ 代码执行完成（无输出）")
+                                    
+                            finally:
+                                sys.stdout = old_stdout
+                                
+                        except Exception as e:
+                            st.error(f"❌ 代码执行错误: {str(e)}")
+                            st.error("请检查代码语法和逻辑")
+                else:
+                    st.warning("⚠️ 请输入要执行的代码")
+        
+        # Tab 4: 搜索工具
+        with doc_tab4:
+            st.header("🔍 文档搜索工具")
+            
+            if st.session_state.document_processor:
+                # 关键词搜索
+                st.subheader("🎯 关键词搜索")
+                
+                col_search1, col_search2 = st.columns([3, 1])
+                
+                with col_search1:
+                    search_keyword = st.text_input(
+                        "输入搜索关键词",
+                        placeholder="例如: 合同编号、重要条款、日期等...",
+                        key="doc_search_keyword"
+                    )
+                
+                with col_search2:
+                    context_lines = st.number_input(
+                        "上下文行数",
+                        min_value=1,
+                        max_value=10,
+                        value=3,
+                        key="doc_context_lines"
+                    )
+                
+                if st.button("🔍 搜索", type="primary", use_container_width=True):
+                    if search_keyword.strip():
+                        with st.spinner(f"🔍 正在搜索关键词: {search_keyword}"):
+                            search_results = st.session_state.document_processor.search_content(
+                                search_keyword, 
+                                context_lines
+                            )
+                            
+                            if search_results:
+                                st.success(f"✅ 找到 {len(search_results)} 个匹配结果")
+                                
+                                for i, result in enumerate(search_results, 1):
+                                    with st.expander(f"📍 结果 {i} - 第{result['line_number']}行", expanded=i <= 3):
+                                        st.markdown(f"**匹配内容**: {result['matched_line']}")
+                                        st.markdown("**上下文**:")
+                                        st.code(result['context'], language='text')
+                            else:
+                                st.warning(f"❌ 未找到关键词: {search_keyword}")
+                    else:
+                        st.warning("⚠️ 请输入搜索关键词")
+                
+                # 批量搜索
+                st.subheader("📋 批量关键词搜索")
+                
+                batch_keywords = st.text_area(
+                    "输入多个关键词（每行一个）",
+                    placeholder="合同编号\n甲方\n乙方\n金额\n日期",
+                    height=100,
+                    key="doc_batch_keywords"
+                )
+                
+                if st.button("🔍 批量搜索", use_container_width=True):
+                    if batch_keywords.strip():
+                        keywords = [kw.strip() for kw in batch_keywords.split('\n') if kw.strip()]
+                        
+                        if keywords:
+                            with st.spinner(f"🔍 正在搜索 {len(keywords)} 个关键词..."):
+                                try:
+                                    from document_utils import DocumentSearchEngine
+                                    search_engine = DocumentSearchEngine(st.session_state.document_processor)
+                                    
+                                    # 生成搜索报告
+                                    search_report = search_engine.generate_search_report(keywords)
+                                    
+                                    st.subheader("📊 批量搜索报告")
+                                    st.markdown(search_report)
+                                    
+                                except Exception as e:
+                                    st.error(f"❌ 批量搜索失败: {str(e)}")
+                        else:
+                            st.warning("⚠️ 请输入有效的关键词")
+                    else:
+                        st.warning("⚠️ 请输入关键词")
+                
+                # 导出搜索结果
+                st.subheader("📤 导出功能")
+                if st.button("📋 导出完整分析报告", use_container_width=True):
+                    try:
+                        # 生成导出文件
+                        user_exports_dir = session_manager.get_user_workspace(session_id) / "exports"
+                        user_exports_dir.mkdir(exist_ok=True)
+                        
+                        json_file, md_file = st.session_state.document_processor.export_analysis_result(str(user_exports_dir))
+                        
+                        # 提供下载
+                        col_download1, col_download2 = st.columns(2)
+                        
+                        with col_download1:
+                            try:
+                                with open(json_file, 'rb') as f:
+                                    json_data = f.read()
+                                st.download_button(
+                                    label="⬇️ 下载JSON数据",
+                                    data=json_data,
+                                    file_name=os.path.basename(json_file),
+                                    mime="application/json",
+                                    use_container_width=True
+                                )
+                            except Exception as e:
+                                st.error(f"JSON下载失败: {e}")
+                        
+                        with col_download2:
+                            try:
+                                with open(md_file, 'rb') as f:
+                                    md_data = f.read()
+                                st.download_button(
+                                    label="⬇️ 下载分析报告",
+                                    data=md_data,
+                                    file_name=os.path.basename(md_file),
+                                    mime="text/markdown",
+                                    use_container_width=True
+                                )
+                            except Exception as e:
+                                st.error(f"报告下载失败: {e}")
+                        
+                        st.success("✅ 文件导出成功！请点击下载按钮获取文件")
+                        
+                    except Exception as e:
+                        st.error(f"❌ 导出失败: {str(e)}")
+            else:
+                st.error("❌ 文档处理器不可用，请重新加载页面")
+    
     else:
         # 欢迎界面
-        st.info("👋 欢迎使用AI Excel智能分析工具多用户版！请上传Excel文件开始分析。")
+        if analysis_mode == "📊 Excel分析":
+            st.info("👋 欢迎使用AI Excel智能分析工具！请上传Excel文件开始分析。")
+        else:
+            st.info("👋 欢迎使用AI文档智能分析工具！请上传DOCX或PDF文档开始分析。")
         
         # 功能介绍
         col1, col2 = st.columns(2)
@@ -2940,13 +4235,22 @@ print("="*50)
             """)
         
         with col2:
-            st.markdown("""
-            ### ⚡ 核心功能
-            - **AI深度分析**: 智能理解业务数据
-            - **代码执行**: 隔离环境处理数据
-            - **实时预览**: 多工作表支持
-            - **数据导出**: 安全文件管理
-            """)
+            if analysis_mode == "📊 Excel分析":
+                st.markdown("""
+                ### ⚡ Excel分析功能
+                - **AI深度分析**: 智能理解业务数据
+                - **代码执行**: 隔离环境处理数据
+                - **实时预览**: 多工作表支持
+                - **数据导出**: 安全文件管理
+                """)
+            else:
+                st.markdown("""
+                ### ⚡ 文档分析功能
+                - **智能预览**: MarkItDown清洗格式
+                - **结构分析**: 标题层级和字体识别
+                - **AI理解**: 深度内容分析
+                - **关键词搜索**: 精确查找和上下文提取
+                """)
         
         # 系统状态展示
         stats = session_manager.get_session_stats()
