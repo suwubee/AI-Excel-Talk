@@ -665,8 +665,8 @@ class EnhancedAIAnalyzer:
                         excel_structure_info += f"    * {col}: {sample_vals}\n"
             
             # 可用变量信息
-            excel_structure_info += f"\n可用变量:\n"
-            excel_structure_info += f"- excel_file_path: 原始Excel文件路径\n"
+            excel_structure_info += f"\n✨ 重要：可用的文件访问变量:\n"
+            excel_structure_info += f"- excel_file_path: 原始Excel文件的完整路径（必须使用此变量访问原始文件）\n"
             excel_structure_info += f"- excel_file_name: 文件名 ({excel_filename})\n"
             excel_structure_info += f"- sheet_names: 所有工作表名称列表\n"
             excel_structure_info += f"- sheet_info: 工作表详细信息字典\n"
@@ -694,17 +694,18 @@ class EnhancedAIAnalyzer:
 
 ## 代码结构要求：
 1. **导入语句**：包含所有必要的import语句
-2. **文件路径设置**：使用excel_file_path变量
+2. **⚠️ 文件路径设置（重要）**：必须使用excel_file_path变量，禁止硬编码文件名
 3. **数据加载验证**：检查文件存在性和工作表有效性
 4. **核心处理逻辑**：实现具体的数据分析任务
 5. **结果输出**：清晰显示处理结果和统计信息
 6. **数据保存**：如需保存，将结果保存回df_变量或导出文件
 
 ## Excel操作要求：
-1. **文件级别操作**：
-   - 使用excel_file_path访问原始Excel文件
-   - 使用pd.read_excel(excel_file_path, sheet_name='xxx')读取特定工作表
-   - 支持复杂的Excel操作，如条件读取、自定义解析等
+1. **📁 文件级别操作（关键要求）**：
+   - ✅ 必须使用excel_file_path变量访问原始Excel文件
+   - ✅ 使用pd.read_excel(excel_file_path, sheet_name='xxx')读取特定工作表
+   - ❌ 禁止硬编码文件名（如'AI.xlsx'、'data.xlsx'等）
+   - ✅ 支持复杂的Excel操作，如条件读取、自定义解析等
 
 2. **跨工作表分析**：
    - 分析不同工作表之间的业务关系和数据关联
@@ -741,6 +742,11 @@ class EnhancedAIAnalyzer:
 1. 根据用户需求生成完整、可执行的Python代码
 2. 深度分析Excel文件结构和工作表关系
 3. 提供高质量的数据处理和分析解决方案
+
+## ⚠️ 关键约束（必须遵守）：
+1. **文件路径访问**：必须使用提供的excel_file_path变量，绝对禁止硬编码文件名
+2. **Excel文件读取**：必须使用pd.read_excel(excel_file_path, sheet_name='工作表名')的格式
+3. **变量使用**：优先使用环境中提供的DataFrame变量（如df_工作表名）
 
 ## 输出格式要求（严格执行）：
 1. **只返回纯Python代码**，绝对不要包含markdown格式标记
@@ -3294,6 +3300,10 @@ print("="*50)
                                 pd.DataFrame.to_excel = original_to_excel
                             except:
                                 pass
+                            
+                            # 导入traceback模块以获取详细错误信息
+                            import traceback
+                            
                             st.error(f"❌ 代码执行错误: {str(e)}")
                             st.code(f"错误详情:\n{traceback.format_exc()}", language="text")
                 
