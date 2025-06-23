@@ -214,7 +214,7 @@ class AdvancedDocumentProcessor:
         导出分析结果
         
         Args:
-            output_dir: 输出目录
+            output_dir: 输出目录（如果为None，尝试使用用户导出目录）
             
         Returns:
             (JSON文件路径, Markdown报告路径)
@@ -223,21 +223,35 @@ class AdvancedDocumentProcessor:
             raise ValueError("没有分析结果可导出")
         
         if output_dir is None:
-            output_dir = tempfile.gettempdir()
+            # 尝试使用用户导出目录（如果在执行环境中可用）
+            try:
+                import inspect
+                frame = inspect.currentframe()
+                while frame:
+                    if 'user_exports_dir' in frame.f_globals:
+                        output_dir = str(frame.f_globals['user_exports_dir'])
+                        break
+                    frame = frame.f_back
+                
+                # 如果找不到用户导出目录，使用临时目录
+                if output_dir is None:
+                    output_dir = tempfile.gettempdir()
+            except:
+                output_dir = tempfile.gettempdir()
         
         output_dir = Path(output_dir)
-        output_dir.mkdir(exist_ok=True)
+        output_dir.mkdir(parents=True, exist_ok=True)
         
-        file_name = Path(self.current_document).stem
+        file_name = Path(self.current_document).stem if self.current_document else "document"
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # 导出JSON数据
-        json_file = output_dir / f"{file_name}_analysis_{timestamp}.json"
+        json_file = output_dir / f"{timestamp}_{file_name}_analysis.json"
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump(self.analysis_result, f, ensure_ascii=False, indent=2, default=str)
         
         # 导出Markdown报告
-        md_file = output_dir / f"{file_name}_report_{timestamp}.md"
+        md_file = output_dir / f"{timestamp}_{file_name}_report.md"
         with open(md_file, 'w', encoding='utf-8') as f:
             f.write(self._generate_markdown_report())
         
@@ -434,6 +448,9 @@ class DocumentSearchEngine:
         
         return "\n".join(report_lines)
 
+# 为了向后兼容，创建别名
+DocumentUtils = AdvancedDocumentProcessor
+
 def main():
     """测试函数"""
     processor = AdvancedDocumentProcessor()
@@ -459,4 +476,7 @@ def main():
         print("❌ 测试文件不存在")
 
 if __name__ == "__main__":
-    main() 
+    main()
+
+# 导出列表
+__all__ = ['AdvancedDocumentProcessor', 'DocumentSearchEngine', 'DocumentUtils'] 

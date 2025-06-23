@@ -739,6 +739,99 @@ class DocumentAnalyzer:
         
         return search_data
     
+    def get_page_count(self, file_path: str = None) -> int:
+        """
+        获取文档页数
+        
+        Args:
+            file_path: 文档路径，如果不提供则使用当前分析的文档
+            
+        Returns:
+            文档页数
+        """
+        if file_path is None:
+            file_path = self.document_path
+        
+        if not file_path or not os.path.exists(file_path):
+            return 0
+            
+        doc_type = self._detect_document_type(file_path)
+        
+        if doc_type == 'pdf':
+            try:
+                if PYMUPDF_AVAILABLE:
+                    doc = fitz.open(file_path)
+                    page_count = len(doc)
+                    doc.close()
+                    return page_count
+                elif PYPDF2_AVAILABLE:
+                    with open(file_path, 'rb') as file:
+                        pdf_reader = PyPDF2.PdfReader(file)
+                        return len(pdf_reader.pages)
+            except Exception as e:
+                print(f"⚠️ 获取PDF页数失败: {e}")
+                return 0
+        
+        elif doc_type == 'docx':
+            try:
+                if DOCX_AVAILABLE:
+                    # DOCX没有明确的"页数"概念，这里估算
+                    doc = Document(file_path)
+                    paragraph_count = len(doc.paragraphs)
+                    # 粗略估算：每页约15-20个段落
+                    estimated_pages = max(1, paragraph_count // 18)
+                    return estimated_pages
+            except Exception as e:
+                print(f"⚠️ 获取DOCX页数失败: {e}")
+                return 0
+        
+        return 0
+    
+    def analyze_structure(self, file_path: str = None) -> Dict[str, Any]:
+        """
+        分析文档结构（为了兼容AI生成的代码）
+        
+        Args:
+            file_path: 文档路径，如果不提供则使用当前分析的文档
+            
+        Returns:
+            文档结构分析结果
+        """
+        if file_path is None:
+            file_path = self.document_path
+            
+        if not file_path or not os.path.exists(file_path):
+            return {}
+            
+        try:
+            return self._analyze_document_structure(file_path)
+        except Exception as e:
+            print(f"⚠️ 结构分析失败: {e}")
+            return {}
+    
+    def get_document_info(self, file_path: str = None) -> Dict[str, Any]:
+        """
+        获取文档基本信息
+        
+        Args:
+            file_path: 文档路径，如果不提供则使用当前分析的文档
+            
+        Returns:
+            文档基本信息
+        """
+        if file_path is None:
+            file_path = self.document_path
+            
+        if not file_path or not os.path.exists(file_path):
+            return {}
+        
+        return {
+            'name': Path(file_path).name,
+            'type': self._detect_document_type(file_path),
+            'size_mb': round(os.path.getsize(file_path) / (1024 * 1024), 2),
+            'page_count': self.get_page_count(file_path)
+        }
+
     def search_keyword_context(self, keyword: str, context_lines: int = 3) -> List[Dict[str, Any]]:
         """
         搜索关键词并返回上下文

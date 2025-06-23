@@ -245,14 +245,28 @@ class EnhancedDocumentAIAnalyzer:
                         "content": """你是一位Python编程专家，擅长文档处理和数据分析。
 请根据用户的需求，生成完整、可执行的Python代码。
 
-代码要求：
-1. 使用document_analyzer和document_utils模块
-2. 包含完整的导入语句和错误处理
-3. 提供详细的中文注释
-4. 代码结构清晰，易于理解和修改
-5. 包含结果输出和保存功能
+## 严格的代码格式要求：
+1. **只返回纯Python代码**，不要包含任何markdown格式标记（如```python 或 ```）
+2. **不要添加任何解释性文字**，只返回可直接执行的代码
+3. **代码必须是完整的**，包含所有必要的导入语句
+4. **每行代码前不要有额外的空格或制表符**
 
-专注于实用性和可执行性。"""
+## 代码质量要求：
+1. 使用document_analyzer和document_utils模块进行文档处理
+2. 包含完整的导入语句和错误处理
+3. 提供详细的中文注释，解释每个步骤的作用
+4. 代码结构清晰，逻辑分明，易于理解和修改
+5. 包含结果输出和保存功能
+6. 添加执行进度提示和关键节点的状态输出
+
+## 功能实现要求：
+1. **文档加载和验证**：检查文档是否存在和格式是否正确
+2. **数据处理逻辑**：实现具体的分析、提取、转换等功能
+3. **结果输出**：清晰展示处理结果，包含统计信息
+4. **文件保存**：如需保存结果，提供保存到文件的功能
+5. **错误处理**：对可能的异常进行捕获和处理
+
+请严格按照上述要求生成代码，确保代码可以直接复制粘贴运行。"""
                     },
                     {
                         "role": "user",
@@ -263,7 +277,56 @@ class EnhancedDocumentAIAnalyzer:
                 max_tokens=2000
             )
             
-            return response.choices[0].message.content
+            # 获取生成的代码
+            code = response.choices[0].message.content
+            
+            # 彻底清理可能的markdown格式标记
+            import re
+            
+            # 移除开头的各种markdown代码块标记
+            code = re.sub(r'^```(?:python|py)?\s*\n?', '', code, flags=re.IGNORECASE | re.MULTILINE)
+            
+            # 移除结尾的markdown代码块标记
+            code = re.sub(r'\n?\s*```\s*$', '', code, flags=re.MULTILINE)
+            
+            # 移除可能的行内代码标记
+            code = re.sub(r'`{1,3}([^`]+)`{1,3}', r'\1', code)
+            
+            # 移除可能的解释性文字段落（检测非代码内容）
+            lines = code.split('\n')
+            filtered_lines = []
+            
+            for line in lines:
+                stripped = line.strip()
+                # 跳过纯解释性文字行（不包含代码特征的行）
+                if stripped and not any([
+                    stripped.startswith('#'),  # 注释
+                    stripped.startswith('import '),  # 导入语句
+                    stripped.startswith('from '),  # 导入语句
+                    '=' in stripped,  # 赋值语句
+                    stripped.startswith('def '),  # 函数定义
+                    stripped.startswith('class '),  # 类定义
+                    stripped.startswith('if '),  # 条件语句
+                    stripped.startswith('for '),  # 循环语句
+                    stripped.startswith('while '),  # 循环语句
+                    stripped.startswith('try:'),  # 异常处理
+                    stripped.startswith('except'),  # 异常处理
+                    stripped.startswith('finally:'),  # 异常处理
+                    stripped.startswith('with '),  # 上下文管理器
+                    stripped.endswith(':'),  # 代码块
+                    'print(' in stripped,  # 输出语句
+                    stripped.startswith('    '),  # 缩进代码
+                ]):
+                    # 检查是否是纯解释性文字
+                    if not any(char in stripped for char in ['(', ')', '[', ']', '{', '}', '=', '.', ',']):
+                        continue  # 跳过纯文字说明
+                
+                filtered_lines.append(line)
+            
+            # 重新组合代码
+            code = '\n'.join(filtered_lines)
+            
+            return code.strip()
             
         except Exception as e:
             return f"# 代码生成失败: {str(e)}\n\n# 请检查API配置或网络连接"
@@ -301,15 +364,108 @@ class EnhancedDocumentAIAnalyzer:
                 heading_list = headings[level]
                 prompt_parts.append(f"- {level}级标题: {len(heading_list)}个")
         
-        # 可用的工具类
+        # 可用的工具类和函数
         prompt_parts.append(f"")
-        prompt_parts.append(f"## 可用工具")
-        prompt_parts.append(f"- DocumentAnalyzer: 文档分析和搜索")
-        prompt_parts.append(f"- AdvancedDocumentProcessor: 高级文档处理")
-        prompt_parts.append(f"- DocumentSearchEngine: 搜索引擎")
+        prompt_parts.append(f"## 可用工具和方法")
+        prompt_parts.append(f"### DocumentAnalyzer 类的可用方法:")
+        prompt_parts.append(f"- analyzer.analyze_document(file_path): 完整分析文档")
+        prompt_parts.append(f"- analyzer.get_page_count(file_path): 获取文档页数")
+        prompt_parts.append(f"- analyzer.analyze_structure(file_path): 分析文档结构")
+        prompt_parts.append(f"- analyzer.get_document_info(file_path): 获取文档基本信息")
+        prompt_parts.append(f"- analyzer.search_keyword_context(keyword, context_lines): 搜索关键词")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### AdvancedDocumentProcessor 类的可用方法:")
+        prompt_parts.append(f"- processor.load_document(file_path): 加载并分析文档")
+        prompt_parts.append(f"- processor.search_content(keyword, context_lines): 搜索内容")
+        prompt_parts.append(f"- processor.export_analysis_result(): 导出分析结果")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### 重要提示:")
+        prompt_parts.append(f"- 必须传入完整的文档路径参数")
+        prompt_parts.append(f"- 使用 doc_file_path 变量作为文档路径")
+        prompt_parts.append(f"- 所有方法都有完整的错误处理")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"## 可用变量和函数")
+        prompt_parts.append(f"### 文档路径变量")
+        prompt_parts.append(f"- doc_file_path: 当前文档的完整文件路径（字符串）")
+        prompt_parts.append(f"- doc_file_name: 当前文档的文件名")
+        prompt_parts.append(f"- document_analysis: 完整的文档分析结果字典")
+        prompt_parts.append(f"- doc_info: 文档基本信息（file_info）")
+        prompt_parts.append(f"- doc_structure: 文档结构信息（structure_analysis）")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### 工作空间变量")
+        prompt_parts.append(f"- user_workspace: 用户工作空间目录")
+        prompt_parts.append(f"- user_exports_dir: 用户导出目录")
+        prompt_parts.append(f"- user_uploads_dir: 用户上传目录")
+        prompt_parts.append(f"- user_temp_dir: 用户临时目录")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### 实用函数")
+        prompt_parts.append(f"- save_to_exports(filename, data): 保存文件到导出目录")
+        prompt_parts.append(f"- get_export_path(filename): 获取导出文件路径")
+        prompt_parts.append(f"- get_temp_path(filename): 获取临时文件路径")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### 重要提示")
+        prompt_parts.append(f"- 使用 doc_file_path 变量访问当前文档")
+        prompt_parts.append(f"- 首先检查 doc_file_path 是否存在和有效")
+        prompt_parts.append(f"- 所有生成的文件都应保存到用户导出目录")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"## 可用库和模块")
+        prompt_parts.append(f"- 标准库: os, datetime, json, shutil, tempfile, sys, time, re, Path")
+        prompt_parts.append(f"- 数据处理: BytesIO, StringIO, base64, hashlib, uuid")
+        prompt_parts.append(f"- PDF处理: fitz (PyMuPDF), PyPDF2 (如果需要)")
+        prompt_parts.append(f"- 进度显示: tqdm (进度条)")
+        prompt_parts.append(f"- 图像处理: PIL/Pillow (通过文档分析器)")
+        prompt_parts.append(f"- 文档处理: python-docx, markitdown")
         
         prompt_parts.append(f"")
-        prompt_parts.append(f"请生成完整的Python代码来完成上述任务。")
+        prompt_parts.append(f"## 代码生成要求")
+        prompt_parts.append(f"请生成完整的Python代码来完成上述任务，必须遵循以下规范：")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### 格式要求：")
+        prompt_parts.append(f"- 只返回纯Python代码，不要包含markdown格式")
+        prompt_parts.append(f"- 不要添加任何```python 或 ``` 标记")
+        prompt_parts.append(f"- 代码可以直接复制粘贴执行")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### 代码结构：")
+        prompt_parts.append(f"1. 导入所有需要的模块")
+        prompt_parts.append(f"2. 检查 doc_file_path 变量是否存在和有效")
+        prompt_parts.append(f"3. 文档加载和初始化处理器")
+        prompt_parts.append(f"4. 具体的数据处理逻辑")
+        prompt_parts.append(f"5. 结果输出和统计信息")
+        prompt_parts.append(f"6. 使用 save_to_exports() 保存结果")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### 代码模板示例：")
+        prompt_parts.append(f"```")
+        prompt_parts.append(f"# 步骤1: 导入模块")
+        prompt_parts.append(f"import os")
+        prompt_parts.append(f"from document_analyzer import DocumentAnalyzer")
+        prompt_parts.append(f"from document_utils import AdvancedDocumentProcessor")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"# 步骤2: 检查文档路径")
+        prompt_parts.append(f"if not doc_file_path or not os.path.exists(doc_file_path):")
+        prompt_parts.append(f"    print('❌ 文档文件不存在，请先选择文档')")
+        prompt_parts.append(f"    exit()")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"# 步骤3: 初始化分析器")
+        prompt_parts.append(f"analyzer = DocumentAnalyzer()")
+        prompt_parts.append(f"processor = AdvancedDocumentProcessor()")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"# 步骤4: 获取基本信息")
+        prompt_parts.append(f"doc_info = analyzer.get_document_info(doc_file_path)")
+        prompt_parts.append(f"page_count = analyzer.get_page_count(doc_file_path)")
+        prompt_parts.append(f"print(f'文档页数: {{page_count}}')")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"# 步骤5: 分析结构")
+        prompt_parts.append(f"structure = analyzer.analyze_structure(doc_file_path)")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"# 步骤6: 保存结果")
+        prompt_parts.append(f"save_to_exports('analysis_result.json', structure)")
+        prompt_parts.append(f"```")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"### 必需功能：")
+        prompt_parts.append(f"- 添加中文注释解释每个步骤")
+        prompt_parts.append(f"- 包含完整的错误处理")
+        prompt_parts.append(f"- 显示执行进度和状态信息")
+        prompt_parts.append(f"- 输出详细的处理结果")
         
         return "\n".join(prompt_parts)
     
