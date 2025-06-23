@@ -109,7 +109,7 @@ class AdvancedDocumentProcessor:
             summary_lines.append(f"- **图片数**: {structure.get('images_count', 0)}")
             summary_lines.append(f"- **字体种类**: {len(structure.get('fonts_used', []))}")
         
-        # 标题结构 - 100个以内全部显示
+        # 标题结构
         headings = structure.get('headings', {})
         if headings:
             summary_lines.append("")
@@ -117,64 +117,21 @@ class AdvancedDocumentProcessor:
             for level in sorted(headings.keys()):
                 heading_list = headings[level]
                 summary_lines.append(f"### {level}级标题 (共{len(heading_list)}个)")
-                
-                # 如果标题数量超过100个，显示前100个并提示
-                if len(heading_list) > 100:
-                    display_headings = heading_list[:100]
-                    for heading in display_headings:
-                        text = heading.get('text', str(heading))[:80]  # 增加显示长度
-                        summary_lines.append(f"- {text}")
-                    summary_lines.append(f"- ... 还有{len(heading_list) - 100}个{level}级标题（超过100个限制）")
-                else:
-                    # 100个以内全部显示
-                    for heading in heading_list:
-                        text = heading.get('text', str(heading))[:80]  # 增加显示长度
-                        summary_lines.append(f"- {text}")
+                for heading in heading_list[:5]:  # 显示前5个
+                    text = heading.get('text', str(heading))[:60]
+                    summary_lines.append(f"- {text}")
+                if len(heading_list) > 5:
+                    summary_lines.append(f"- ... 还有{len(heading_list) - 5}个{level}级标题")
         
-        # 字体信息 - 100个以内全部显示
+        # 字体信息
         fonts = structure.get('fonts_used', [])
         if fonts:
             summary_lines.append("")
             summary_lines.append("## 🔤 字体使用情况")
-            
-            # 如果字体数量超过100个，显示前100个并提示
-            if len(fonts) > 100:
-                display_fonts = fonts[:100]
-                for font in display_fonts:
-                    summary_lines.append(f"- {font}")
-                summary_lines.append(f"- ... 还有{len(fonts) - 100}种字体（超过100个限制）")
-            else:
-                # 100个以内全部显示
-                for font in fonts:
-                    summary_lines.append(f"- {font}")
-        
-        # 图片分析信息
-        images_info = structure.get('images_info', [])
-        if images_info:
-            summary_lines.append("")
-            summary_lines.append("## 🖼️ 图片分析")
-            summary_lines.append(f"- **图片总数**: {len(images_info)}")
-            for i, img_info in enumerate(images_info[:10], 1):  # 显示前10张图片的详细信息
-                summary_lines.append(f"- **图片{i}**: {img_info.get('width', 0)}x{img_info.get('height', 0)}px")
-                if 'page' in img_info:
-                    summary_lines.append(f"  - 位置: 第{img_info['page']}页")
-                if 'watermark_detected' in img_info:
-                    if img_info['watermark_detected']:
-                        summary_lines.append(f"  - ⚠️ 检测到可能的水印")
-                    else:
-                        summary_lines.append(f"  - ✅ 未检测到水印")
-        
-        # 水印检测总结
-        watermark_summary = structure.get('watermark_analysis', {})
-        if watermark_summary:
-            summary_lines.append("")
-            summary_lines.append("## 🔍 水印检测")
-            if watermark_summary.get('has_watermark', False):
-                summary_lines.append("- ⚠️ **检测到可能的水印**")
-                summary_lines.append(f"- 水印类型: {watermark_summary.get('watermark_type', '未知')}")
-                summary_lines.append(f"- 检测置信度: {watermark_summary.get('confidence', 0):.2f}")
-            else:
-                summary_lines.append("- ✅ **未检测到明显水印**")
+            for font in fonts[:10]:  # 显示前10种字体
+                summary_lines.append(f"- {font}")
+            if len(fonts) > 10:
+                summary_lines.append(f"- ... 还有{len(fonts) - 10}种字体")
         
         return "\n".join(summary_lines)
     
@@ -214,7 +171,7 @@ class AdvancedDocumentProcessor:
         导出分析结果
         
         Args:
-            output_dir: 输出目录（如果为None，尝试使用用户导出目录）
+            output_dir: 输出目录
             
         Returns:
             (JSON文件路径, Markdown报告路径)
@@ -223,35 +180,21 @@ class AdvancedDocumentProcessor:
             raise ValueError("没有分析结果可导出")
         
         if output_dir is None:
-            # 尝试使用用户导出目录（如果在执行环境中可用）
-            try:
-                import inspect
-                frame = inspect.currentframe()
-                while frame:
-                    if 'user_exports_dir' in frame.f_globals:
-                        output_dir = str(frame.f_globals['user_exports_dir'])
-                        break
-                    frame = frame.f_back
-                
-                # 如果找不到用户导出目录，使用临时目录
-                if output_dir is None:
-                    output_dir = tempfile.gettempdir()
-            except:
-                output_dir = tempfile.gettempdir()
+            output_dir = tempfile.gettempdir()
         
         output_dir = Path(output_dir)
-        output_dir.mkdir(parents=True, exist_ok=True)
+        output_dir.mkdir(exist_ok=True)
         
-        file_name = Path(self.current_document).stem if self.current_document else "document"
+        file_name = Path(self.current_document).stem
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
         # 导出JSON数据
-        json_file = output_dir / f"{timestamp}_{file_name}_analysis.json"
+        json_file = output_dir / f"{file_name}_analysis_{timestamp}.json"
         with open(json_file, 'w', encoding='utf-8') as f:
             json.dump(self.analysis_result, f, ensure_ascii=False, indent=2, default=str)
         
         # 导出Markdown报告
-        md_file = output_dir / f"{timestamp}_{file_name}_report.md"
+        md_file = output_dir / f"{file_name}_report_{timestamp}.md"
         with open(md_file, 'w', encoding='utf-8') as f:
             f.write(self._generate_markdown_report())
         
@@ -448,9 +391,6 @@ class DocumentSearchEngine:
         
         return "\n".join(report_lines)
 
-# 为了向后兼容，创建别名
-DocumentUtils = AdvancedDocumentProcessor
-
 def main():
     """测试函数"""
     processor = AdvancedDocumentProcessor()
@@ -476,7 +416,4 @@ def main():
         print("❌ 测试文件不存在")
 
 if __name__ == "__main__":
-    main()
-
-# 导出列表
-__all__ = ['AdvancedDocumentProcessor', 'DocumentSearchEngine', 'DocumentUtils'] 
+    main() 

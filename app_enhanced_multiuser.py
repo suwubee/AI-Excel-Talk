@@ -665,8 +665,8 @@ class EnhancedAIAnalyzer:
                         excel_structure_info += f"    * {col}: {sample_vals}\n"
             
             # 可用变量信息
-            excel_structure_info += f"\n✨ 重要：可用的文件访问变量:\n"
-            excel_structure_info += f"- excel_file_path: 原始Excel文件的完整路径（必须使用此变量访问原始文件）\n"
+            excel_structure_info += f"\n可用变量:\n"
+            excel_structure_info += f"- excel_file_path: 原始Excel文件路径\n"
             excel_structure_info += f"- excel_file_name: 文件名 ({excel_filename})\n"
             excel_structure_info += f"- sheet_names: 所有工作表名称列表\n"
             excel_structure_info += f"- sheet_info: 工作表详细信息字典\n"
@@ -676,147 +676,66 @@ class EnhancedAIAnalyzer:
                 excel_structure_info += f"- df_{safe_name}: {sheet_name}工作表的DataFrame\n"
 
             prompt = f"""
-# 任务描述
-{task_description}
+任务描述: {task_description}
 
-# Excel文件完整结构信息
+Excel文件完整结构信息:
 {excel_structure_info}
 
-# 严格的代码格式要求
-请生成完整的Python代码来完成这个任务，必须严格遵循以下规范：
+请生成完整的Python代码来完成这个任务。代码要求：
 
-## 格式要求（必须遵守）：
-1. **只返回纯Python代码**，绝对不要包含任何markdown格式标记
-2. **不要添加```python 或 ``` 或任何代码块标记**
-3. **代码必须可以直接复制粘贴执行**
-4. **每行代码前不要有多余的空格或制表符**
-5. **不要添加任何解释性文字**，只返回代码和注释
+1. **Excel文件级别操作**: 
+   - 可以使用excel_file_path访问原始Excel文件
+   - 可以使用pd.read_excel(excel_file_path, sheet_name='xxx')读取特定工作表
+   - 支持复杂的Excel操作，如条件读取、自定义解析等
 
-## 代码结构要求：
-1. **导入语句**：包含所有必要的import语句
-2. **⚠️ 文件路径设置（重要）**：必须使用excel_file_path变量，禁止硬编码文件名
-3. **数据加载验证**：检查文件存在性和工作表有效性
-4. **核心处理逻辑**：实现具体的数据分析任务
-5. **结果输出**：清晰显示处理结果和统计信息
-6. **数据保存**：如需保存，将结果保存回df_变量或导出文件
-
-## Excel操作要求：
-1. **📁 文件级别操作（关键要求）**：
-   - ✅ 必须使用excel_file_path变量访问原始Excel文件
-   - ✅ 使用pd.read_excel(excel_file_path, sheet_name='xxx')读取特定工作表
-   - ❌ 禁止硬编码文件名（如'AI.xlsx'、'data.xlsx'等）
-   - ✅ 支持复杂的Excel操作，如条件读取、自定义解析等
-
-2. **跨工作表分析**：
-   - 分析不同工作表之间的业务关系和数据关联
+2. **跨工作表分析**:
+   - 分析不同工作表之间的业务关系
    - 识别关联字段和数据流向
    - 实现跨表数据合并、比较、验证
 
-3. **数据处理逻辑**：
-   - 使用pandas进行高级数据处理和分析
-   - 包含完整的错误处理和数据验证
-   - 添加详细的中文注释说明每个步骤的业务逻辑
+3. **综合数据处理**:
+   - 使用pandas进行高级数据处理
+   - 包含必要的错误处理和数据验证
+   - 添加详细的中文注释说明业务逻辑
 
-4. **结果处理**：
-   - 提供清晰的处理结果和详细统计信息
-   - 如果修改数据，确保将结果保存回相应的df_变量
-   - 包含执行进度提示和关键节点状态输出
-   - 显示处理前后的数据对比
+4. **结果输出**:
+   - 提供清晰的处理结果和统计信息
+   - 如果需要修改数据，确保将结果保存回相应的df_变量
+   - 包含执行进度提示和关键节点输出
 
-## 特别注意事项：
-- 如果任务涉及多个工作表，深入分析它们的业务关系
-- 如果需要生成新的汇总或分析结果，创建有意义的变量名
+5. **代码结构**:
+   - 确保代码可以直接执行
+   - 包含必要的导入语句
+   - 结构清晰，逻辑分明
+
+特别注意：
+- 如果任务涉及多个工作表，请分析它们的业务关系
+- 如果需要生成新的汇总或分析结果，请创建新的变量
 - 所有对原数据的修改都要保存回对应的df_变量中
-- 充分利用sheet_names和sheet_info变量实现动态处理
-- 确保代码健壮性，处理可能的数据异常情况
+- 充分利用sheet_names和sheet_info变量来实现动态的工作表处理
 
-请严格按照上述要求生成代码，确保代码质量和可执行性。
+请只返回纯Python代码，不要包含任何markdown格式标记。
 """
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": """你是一个Excel数据分析和Python编程专家，专门生成高质量的Excel处理代码。你深度理解Excel文件结构、工作表关系和业务数据分析。
-
-## 核心职责：
-1. 根据用户需求生成完整、可执行的Python代码
-2. 深度分析Excel文件结构和工作表关系
-3. 提供高质量的数据处理和分析解决方案
-
-## ⚠️ 关键约束（必须遵守）：
-1. **文件路径访问**：必须使用提供的excel_file_path变量，绝对禁止硬编码文件名
-2. **Excel文件读取**：必须使用pd.read_excel(excel_file_path, sheet_name='工作表名')的格式
-3. **变量使用**：优先使用环境中提供的DataFrame变量（如df_工作表名）
-
-## 输出格式要求（严格执行）：
-1. **只返回纯Python代码**，绝对不要包含markdown格式标记
-2. **不要使用```python 或 ``` 或任何代码块标记**
-3. **不要添加任何解释性文字**，只返回代码和中文注释
-4. **确保代码可以直接复制粘贴执行**
-5. **代码格式规范，无多余空格和制表符**
-
-## 代码质量标准：
-1. 包含完整的导入语句和错误处理
-2. 提供详细的中文注释，说明业务逻辑
-3. 代码结构清晰，逻辑分明
-4. 包含执行进度提示和状态输出
-5. 提供详细的处理结果和统计信息
-
-请严格按照上述要求生成代码，确保高质量和可执行性。"""},
+                    {"role": "system", "content": "你是一个Excel数据分析和Python编程专家，专门生成高质量的Excel处理代码。你深度理解Excel文件结构、工作表关系和业务数据分析。只返回纯Python代码，不要包含任何markdown格式标记。"},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1,
                 max_tokens=2000
             )
             
-            # 获取生成的代码
+            # 清理可能的markdown格式
             code = response.choices[0].message.content
             
-            # 彻底清理可能的markdown格式标记
+            # 移除可能的markdown代码块标记
             import re
-            
-            # 移除开头的各种markdown代码块标记
-            code = re.sub(r'^```(?:python|py)?\s*\n?', '', code, flags=re.IGNORECASE | re.MULTILINE)
-            
-            # 移除结尾的markdown代码块标记
-            code = re.sub(r'\n?\s*```\s*$', '', code, flags=re.MULTILINE)
-            
-            # 移除可能的行内代码标记
-            code = re.sub(r'`{1,3}([^`]+)`{1,3}', r'\1', code)
-            
-            # 移除可能的解释性文字段落（检测非代码内容）
-            lines = code.split('\n')
-            filtered_lines = []
-            
-            for line in lines:
-                stripped = line.strip()
-                # 跳过纯解释性文字行（不包含代码特征的行）
-                if stripped and not any([
-                    stripped.startswith('#'),  # 注释
-                    stripped.startswith('import '),  # 导入语句
-                    stripped.startswith('from '),  # 导入语句
-                    '=' in stripped,  # 赋值语句
-                    stripped.startswith('def '),  # 函数定义
-                    stripped.startswith('class '),  # 类定义
-                    stripped.startswith('if '),  # 条件语句
-                    stripped.startswith('for '),  # 循环语句
-                    stripped.startswith('while '),  # 循环语句
-                    stripped.startswith('try:'),  # 异常处理
-                    stripped.startswith('except'),  # 异常处理
-                    stripped.startswith('finally:'),  # 异常处理
-                    stripped.startswith('with '),  # 上下文管理器
-                    stripped.endswith(':'),  # 代码块
-                    'print(' in stripped,  # 输出语句
-                    stripped.startswith('    '),  # 缩进代码
-                ]):
-                    # 检查是否是纯解释性文字
-                    if not any(char in stripped for char in ['(', ')', '[', ']', '{', '}', '=', '.', ',']):
-                        continue  # 跳过纯文字说明
-                
-                filtered_lines.append(line)
-            
-            # 重新组合代码
-            code = '\n'.join(filtered_lines)
+            # 移除开头的```python或```
+            code = re.sub(r'^```(?:python)?\n?', '', code, flags=re.MULTILINE)
+            # 移除结尾的```
+            code = re.sub(r'\n?```$', '', code, flags=re.MULTILINE)
             
             return code.strip()
             
@@ -3300,10 +3219,6 @@ print("="*50)
                                 pd.DataFrame.to_excel = original_to_excel
                             except:
                                 pass
-                            
-                            # 导入traceback模块以获取详细错误信息
-                            import traceback
-                            
                             st.error(f"❌ 代码执行错误: {str(e)}")
                             st.code(f"错误详情:\n{traceback.format_exc()}", language="text")
                 
@@ -3676,83 +3591,6 @@ print("="*50)
             except Exception as e:
                 st.error(f"❌ 预览生成失败: {str(e)}")
             
-            # 图片预览和分析
-            st.subheader("🖼️ 图片预览与水印分析")
-            try:
-                preview_data = st.session_state.document_data.get('preview_data', {})
-                structure_data = st.session_state.document_data.get('structure_analysis', {})
-                
-                # 检查是否有图片信息
-                has_images = preview_data.get('has_images', False)
-                images_preview = preview_data.get('images_preview', [])
-                watermark_analysis = structure_data.get('watermark_analysis', {})
-                
-                if has_images and images_preview:
-                    st.success(f"✅ 检测到 {len(images_preview)} 张图片")
-                    
-                    # 水印检测结果
-                    if watermark_analysis:
-                        col_w1, col_w2 = st.columns(2)
-                        with col_w1:
-                            if watermark_analysis.get('has_watermark', False):
-                                st.warning(f"⚠️ 检测到可能的水印 (置信度: {watermark_analysis.get('confidence', 0):.2f})")
-                                st.info(f"水印类型: {watermark_analysis.get('watermark_type', '未知')}")
-                            else:
-                                st.success("✅ 未检测到明显水印")
-                        with col_w2:
-                            st.metric("图片总数", watermark_analysis.get('total_images', 0))
-                            if watermark_analysis.get('watermark_images', 0) > 0:
-                                st.metric("含水印图片", watermark_analysis.get('watermark_images', 0))
-                    
-                    # 图片预览网格
-                    with st.expander(f"🖼️ 图片预览 (前{len(images_preview)}张)", expanded=True):
-                        # 根据图片数量决定列数
-                        num_images = len(images_preview)
-                        if num_images == 1:
-                            cols = st.columns(1)
-                        elif num_images == 2:
-                            cols = st.columns(2)
-                        elif num_images <= 4:
-                            cols = st.columns(2)
-                        else:
-                            cols = st.columns(3)
-                        
-                        for i, img_info in enumerate(images_preview):
-                            with cols[i % len(cols)]:
-                                try:
-                                    # 显示图片
-                                    import base64
-                                    img_data = base64.b64decode(img_info['base64'])
-                                    st.image(img_data, 
-                                           caption=f"图片 {i+1}: {img_info.get('width', 0)}x{img_info.get('height', 0)}px",
-                                           use_column_width=True)
-                                    
-                                    # 图片详细信息 - 使用 st.container 而不是嵌套 expander
-                                    with st.container():
-                                        st.markdown(f"**📋 图片{i+1}详情**")
-                                        st.markdown(f"- **尺寸**: {img_info.get('width', 0)} x {img_info.get('height', 0)} 像素")
-                                        st.markdown(f"- **大小**: {img_info.get('size_kb', 0):.1f} KB")
-                                        st.markdown(f"- **格式**: {img_info.get('format', 'Unknown')}")
-                                        
-                                        if 'page' in img_info:
-                                            st.markdown(f"- **位置**: 第{img_info['page']}页")
-                                        
-                                        # 水印检测结果
-                                        if img_info.get('watermark_detected', False):
-                                            st.warning(f"⚠️ 检测到可能的水印")
-                                            st.markdown(f"- **水印类型**: {img_info.get('watermark_type', '未知')}")
-                                            st.markdown(f"- **置信度**: {img_info.get('watermark_confidence', 0):.2f}")
-                                        else:
-                                            st.success("✅ 未检测到水印")
-                                
-                                except Exception as e:
-                                    st.error(f"图片{i+1}显示失败: {str(e)}")
-                else:
-                    st.info("📷 该文档中未检测到图片，或图片提取失败")
-                    
-            except Exception as e:
-                st.error(f"❌ 图片分析失败: {str(e)}")
-            
             # 结构化分析摘要
             st.subheader("🏗️ 文档结构摘要")
             try:
@@ -3828,43 +3666,25 @@ print("="*50)
                                         analysis_text += f"- **页数**: {structure_analysis.get('total_pages', 0)}\n"
                                         analysis_text += f"- **图片数**: {structure_analysis.get('images_count', 0)}\n"
                                     
-                                    # 标题层级 - 100个以内全部显示
+                                    # 标题层级
                                     headings = structure_analysis.get('headings', {})
                                     if headings:
                                         analysis_text += "\n## 🏷️ 标题层级结构\n"
                                         for level in sorted(headings.keys()):
                                             heading_list = headings[level]
                                             analysis_text += f"### {level}级标题 (共{len(heading_list)}个)\n"
-                                            
-                                            # 100个以内全部显示，超过则截断
-                                            if len(heading_list) <= 100:
-                                                for heading in heading_list:
-                                                    text = heading.get('text', str(heading))[:120]  # 增加显示长度
-                                                    analysis_text += f"- {text}\n"
-                                            else:
-                                                # 显示前100个
-                                                for heading in heading_list[:100]:
-                                                    text = heading.get('text', str(heading))[:120]
-                                                    analysis_text += f"- {text}\n"
-                                                analysis_text += f"- ... 还有{len(heading_list) - 100}个{level}级标题（超过100个限制）\n"
+                                            for heading in heading_list[:3]:
+                                                text = heading.get('text', str(heading))[:100]
+                                                analysis_text += f"- {text}\n"
+                                            if len(heading_list) > 3:
+                                                analysis_text += f"- ... 还有{len(heading_list) - 3}个\n"
                                     
-                                    # 字体使用 - 100个以内全部显示
+                                    # 字体使用
                                     fonts = structure_analysis.get('fonts_used', [])
                                     if fonts:
                                         analysis_text += f"\n## 🔤 字体使用情况\n"
                                         analysis_text += f"- **字体种类数**: {len(fonts)}\n"
-                                        
-                                        if len(fonts) <= 100:
-                                            # 100个以内全部显示
-                                            analysis_text += f"- **所有字体**:\n"
-                                            for font in fonts:
-                                                analysis_text += f"  - {font}\n"
-                                        else:
-                                            # 超过100个，显示前100个
-                                            analysis_text += f"- **字体列表** (前100个):\n"
-                                            for font in fonts[:100]:
-                                                analysis_text += f"  - {font}\n"
-                                            analysis_text += f"  - ... 还有{len(fonts) - 100}种字体（超过100个限制）\n"
+                                        analysis_text += f"- **主要字体**: {', '.join(fonts[:5])}\n"
                                     
                                     st.session_state.quick_doc_analysis = analysis_text
                                     st.success("✅ 文档结构化分析完成！")
@@ -4162,275 +3982,42 @@ print("="*50)
             # 代码编辑器
             st.subheader("📝 Python代码编辑器")
             
-            # 构建默认代码模板（参考Excel的方式）
-            default_doc_code = f"""
-# ===========================================
-# 📄 原始文档文件信息
-# ==========================================="""
-            
-            # 添加当前文档文件信息
-            if hasattr(st.session_state, 'current_doc_path') and st.session_state.current_doc_path:
-                default_doc_code += f"""
-# 当前文档文件信息
-doc_file_path = r"{st.session_state.current_doc_path}"
-doc_file_name = "{st.session_state.get('current_doc_name', 'unknown')}"
-
-print("📄 当前文档文件信息:")
-print(f"   文件路径: {{doc_file_path}}")
-print(f"   文件名: {{doc_file_name}}")
-print()"""
-            else:
-                default_doc_code += f"""
-# 文档文件信息（需要先选择或上传文件）
-doc_file_path = None
-doc_file_name = "请先选择文档文件"
-
-print("⚠️  请先在'📁 上传文档文件'部分选择或上传文档文件")
-print()"""
-            
-            # 添加文档分析结果展示
-            if hasattr(st.session_state, 'document_analysis') and st.session_state.document_analysis:
-                doc_analysis = st.session_state.document_analysis
-                file_info = doc_analysis.get('file_info', {})
-                structure = doc_analysis.get('structure_analysis', {})
-                
-                default_doc_code += f"""
-# ===========================================
-# 📋 文档分析数据概览
-# ===========================================
-
-# 文档基本信息
-document_analysis = {doc_analysis}
-file_info = {file_info}
-structure_analysis = {structure}
-
-print("📊 文档分析概览:")
-print(f"   文档类型: {file_info.get('type', 'unknown')}")
-print(f"   文件大小: {file_info.get('size_mb', 0)} MB")
-print(f"   创建时间: {file_info.get('created_time', 'Unknown')}")"""
-                
-                if structure:
-                    if file_info.get('type') == 'pdf':
-                        default_doc_code += f"""
-print(f"   总页数: {structure.get('total_pages', 0)}")
-print(f"   图片数量: {structure.get('images_count', 0)}")
-print(f"   文本页数: {structure.get('text_pages', 0)}")"""
-                    elif file_info.get('type') == 'docx':
-                        default_doc_code += f"""
-print(f"   段落数: {structure.get('total_paragraphs', 0)}")
-print(f"   表格数: {structure.get('tables_count', 0)}")
-print(f"   图片数: {structure.get('images_count', 0)}")"""
-                
-                # 显示文档内容预览
-                content_preview = doc_analysis.get('content_preview', {})
-                if content_preview:
-                    headers = content_preview.get('headers', [])
-                    default_doc_code += f"""
-print("\\n📋 文档结构预览:")
-if len({headers}) > 0:
-    print("主要标题:")
-    for i, header in enumerate({headers}[:5], 1):  # 显示前5个标题
-        print(f"    {i}. {header['text'][:50]}..." if len(header['text']) > 50 else f"    {i}. {header['text']}")
-    if len({headers}) > 5:
-        print(f"    ... 还有 {len({headers}) - 5} 个标题")"""
-                    
-                    fonts = content_preview.get('fonts', [])
-                    if fonts:
-                        default_doc_code += f"""
-print("\\n字体信息:")
-for i, font in enumerate({fonts}[:3], 1):  # 显示前3种字体
-    print(f"    {i}. {font['name']} ({font['size']}pt) - 使用{font['count']}次")
-if len({fonts}) > 3:
-    print(f"    ... 还有 {len({fonts}) - 3} 种字体")"""
-                
-                default_doc_code += f"""
-print()"""
-            else:
-                default_doc_code += f"""
-# ===========================================
-# 📋 文档分析概览
-# ===========================================
-
-# 请先在上方进行文档分析，以获取完整的分析数据
-print("💡 提示：请先在'文档分析'部分上传并分析文档，然后返回此处进行代码编程")
-print("   分析完成后，以下变量将自动可用：")
-print("   - document_analysis: 完整的分析结果字典")
-print("   - file_info: 文件基本信息")
-print("   - structure_analysis: 文档结构分析")
-print()"""
-            
-            default_doc_code += f"""
-# ===========================================
-# 📋 可用工具和方法展示
-# ===========================================
-
+            # 提供示例代码
+            default_doc_code = '''# 文档分析示例代码
 from document_analyzer import DocumentAnalyzer
 from document_utils import AdvancedDocumentProcessor
 
-# 初始化文档处理器
-analyzer = DocumentAnalyzer()
+# 初始化处理器
 processor = AdvancedDocumentProcessor()
 
-print("🔧 可用的文档分析工具:")
-print("1. DocumentAnalyzer - 基础文档分析")
-print("   - analyzer.get_page_count(file_path)")
-print("   - analyzer.analyze_structure(file_path)")
-print("   - analyzer.get_document_info(file_path)")
-print()
+# 分析文档（文件路径会自动替换）
+doc_path = "current_document_path"
+analysis_result = processor.load_document(doc_path)
 
-print("2. AdvancedDocumentProcessor - 高级文档处理")
-print("   - processor.load_document(file_path)")
-print("   - processor.search_content(keyword, context_lines=2)")
-print("   - processor.export_analysis_result()")
-print()
+# 获取文档基本信息
+file_info = analysis_result["file_info"]
+print(f"文档名: {file_info['name']}")
+print(f"类型: {file_info['type']}")
+print(f"大小: {file_info['size_mb']} MB")
 
-# ===========================================
-# 💡 使用示例和最佳实践
-# ===========================================
+# 搜索关键词示例
+keyword = "重要信息"  # 修改为您要搜索的关键词
+search_results = processor.search_content(keyword, context_lines=2)
 
-print("=" * 50)
-print("💡 示例1: 基础文档信息获取")
-print("=" * 50)
+print(f"\\n=== 搜索关键词: {keyword} ===")
+for i, result in enumerate(search_results, 1):
+    print(f"结果 {i}:")
+    print(f"  位置: 第{result['line_number']}行")
+    print(f"  内容: {result['matched_line']}")
+    print(f"  上下文:\\n{result['context']}")
+    print("-" * 50)
 
-if doc_file_path and os.path.exists(doc_file_path):
-    # 获取文档基本信息
-    try:
-        page_count = analyzer.get_page_count(doc_file_path)
-        doc_info = analyzer.get_document_info(doc_file_path)
-        
-        print(f"文档页数: {{page_count}}")
-        print(f"文档信息: {{doc_info}}")
-    except Exception as e:
-        print(f"获取文档信息时出错: {{e}}")
-
-print("\\n" + "=" * 50)
-print("💡 示例2: 高级文档分析")
-print("=" * 50)
-
-if doc_file_path and os.path.exists(doc_file_path):
-    try:
-        # 加载并分析文档
-        analysis_result = processor.load_document(doc_file_path)
-        
-        print("文档分析完成！")
-        print(f"文件信息: {{{{analysis_result.get('file_info', {{}})}}}}")
-        
-        # 搜索关键词示例
-        keyword = "重要"  # 可修改搜索关键词
-        search_results = processor.search_content(keyword, context_lines=1)
-        
-        print(f"\\n搜索关键词 '{{{{keyword}}}}' 的结果:")
-        for i, result in enumerate(search_results[:3], 1):
-            print(f"  {{{{i}}}}. 第{{{{result.get('line_number', '?')}}}}行: {{{{result.get('matched_line', '')[:60]}}}}...")
-        
-        if len(search_results) > 3:
-            print(f"  ... 还有 {{{{len(search_results) - 3}}}} 个结果")
-            
-    except Exception as e:
-        print(f"文档分析时出错: {{{{e}}}}")
-
-print("\\n" + "=" * 50)
-print("💡 示例3: 文档内容提取和导出")
-print("=" * 50)
-
-if doc_file_path and os.path.exists(doc_file_path):
-    try:
-        # 根据文档类型进行不同处理
-        if doc_file_path.endswith('.pdf'):
-            print("PDF文档处理示例:")
-            print("# import fitz  # PyMuPDF")
-            print("# doc = fitz.open(doc_file_path)")
-            print("# for page_num in range(doc.page_count):")
-            print("#     page = doc[page_num]")
-            print("#     text = page.get_text()")
-            print("#     print(f'第{{{{page_num+1}}}}页: {{{{text[:100]}}}}...')")
-            print("# doc.close()")
-            
-        elif doc_file_path.endswith('.docx'):
-            print("Word文档处理示例:")
-            print("# from docx import Document")
-            print("# doc = Document(doc_file_path)")
-            print("# for i, paragraph in enumerate(doc.paragraphs[:5]):")
-            print("#     print(f'段落{{{{i+1}}}}: {{{{paragraph.text[:100]}}}}...')")
-            
-        # 导出分析结果示例
-        print("\\n导出文档分析结果:")
-        json_file, md_file = processor.export_analysis_result()
-        print(f"✅ JSON数据已保存: {{{{os.path.basename(json_file)}}}}")
-        print(f"✅ Markdown报告已保存: {{{{os.path.basename(md_file)}}}}")
-        
-    except Exception as e:
-        print(f"文档处理时出错: {{{{e}}}}")
-
-print("\\n" + "=" * 50)
-print("💡 示例4: 自定义分析和保存")
-print("=" * 50)
-
-# 自定义分析结果
-if doc_file_path and os.path.exists(doc_file_path):
-    file_size_mb = os.path.getsize(doc_file_path) / (1024*1024)
-    file_ext = os.path.splitext(doc_file_path)[1]
-    current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    
-    custom_report = f\\\"\\\"\\\"
-文档分析报告
-=============
-文档名称: {{doc_file_name}}
-文件路径: {{doc_file_path}}
-分析时间: {{current_time}}
-
-基本信息:
-- 文件大小: {{file_size_mb:.2f}} MB
-- 文件类型: {{file_ext}}
-
-自定义分析:
-[在此添加您的分析内容]
-\\\"\\\"\\\"
-    
-    # 保存到用户导出目录
-    save_to_exports("自定义文档分析报告.txt", custom_report)
-    print("✅ 自定义分析报告已保存到导出目录")
-
-print("\\n" + "=" * 50)
-print("🔐 数据安全和工作空间提醒:")
-print("- 所有文件自动保存到您的专属工作空间")
-print("- 使用 save_to_exports() 函数将结果保存到导出目录")
-print("- 使用 get_temp_path() 获取临时文件路径")
-print("- 导出的文件可在'数据工具'标签页下载")
-print("- 所有操作都在您的专属隔离环境中进行")
-print("=" * 50)
-
-# ===========================================
-# 🚀 开始您的文档分析
-# ===========================================
-
-# 在这里编写您的分析代码
-# 记住：
-# 1. 可以直接访问 doc_file_path (当前文档路径)
-# 2. 可以使用 document_analysis (如果已分析过文档)
-# 3. 导出文件使用 save_to_exports() 函数
-# 4. 所有操作都在您的专属隔离环境中进行
-
-# 重要的可用变量:
-# - doc_file_path: 当前文档的完整路径
-# - doc_file_name: 当前文档的文件名
-# - analyzer: DocumentAnalyzer实例
-# - processor: AdvancedDocumentProcessor实例
-# - document_analysis: 文档分析结果字典 (如果可用)
-
-# 重要的可用函数:
-# - save_to_exports(filename, data): 保存文件到导出目录
-# - get_export_path(filename): 获取导出文件路径
-# - get_temp_path(filename): 获取临时文件路径
-
-# 示例代码取消注释即可使用:
-# if doc_file_path and os.path.exists(doc_file_path):
-#     print(f"正在处理文档: {{doc_file_name}}")
-#     
-#     # 您的文档处理代码...
-#     
-#     print("处理完成！")
-"""
+# 导出分析结果
+json_file, md_file = processor.export_analysis_result()
+print(f"\\n分析结果已导出:")
+print(f"JSON文件: {json_file}")
+print(f"报告文件: {md_file}")
+'''
             
             doc_code_input = st.text_area(
                 "输入Python代码",
@@ -4443,12 +4030,7 @@ print("=" * 50)
                 if doc_code_input.strip():
                     with st.spinner("🔄 正在执行代码..."):
                         try:
-                            # 获取用户会话和工作空间信息（使用已有的session_manager）
-                            session_id = get_session_id()
-                            user_workspace = st.session_state.session_manager.get_user_workspace(session_id)
-                            
                             # 创建安全的执行环境
-                            from pathlib import Path  # 确保Path正确导入
                             exec_globals = {
                                 '__builtins__': __builtins__,
                                 'print': print,
@@ -4460,403 +4042,48 @@ print("=" * 50)
                                 'dict': dict,
                                 'enumerate': enumerate,
                                 'range': range,
-                                'os': os,
-                                'datetime': datetime,
-                                'Path': Path,
-                                'pathlib': __import__('pathlib'),
                             }
-                            
-                            # 添加常用的标准库模块
-                            try:
-                                import shutil
-                                import tempfile
-                                import sys
-                                import time
-                                import hashlib
-                                import uuid
-                                import base64
-                                import urllib
-                                import math
-                                import random
-                                
-                                exec_globals.update({
-                                    'shutil': shutil,
-                                    'tempfile': tempfile,
-                                    'sys': sys,
-                                    'time': time,
-                                    'hashlib': hashlib,
-                                    'uuid': uuid,
-                                    'base64': base64,
-                                    'urllib': urllib,
-                                    'math': math,
-                                    'random': random,
-                                })
-                                
-                                # 添加常用的第三方库（如果可用）
-                                try:
-                                    import fitz  # PyMuPDF
-                                    exec_globals['fitz'] = fitz
-                                except ImportError:
-                                    pass
-                                
-                                try:
-                                    import tqdm
-                                    exec_globals['tqdm'] = tqdm.tqdm
-                                except ImportError:
-                                    # 如果tqdm不可用，提供简单的替代
-                                    def simple_tqdm(iterable, desc="进度"):
-                                        total = len(iterable) if hasattr(iterable, '__len__') else None
-                                        for i, item in enumerate(iterable):
-                                            if total:
-                                                print(f"\r{desc}: {i+1}/{total}", end='', flush=True)
-                                            yield item
-                                        if total:
-                                            print()  # 换行
-                                    exec_globals['tqdm'] = simple_tqdm
-                                
-                                try:
-                                    import re
-                                    from io import BytesIO, StringIO
-                                    exec_globals.update({
-                                        're': re,
-                                        'BytesIO': BytesIO,
-                                        'StringIO': StringIO,
-                                    })
-                                except ImportError:
-                                    pass
-                                
-                                # 添加图像处理库（如果可用）
-                                try:
-                                    from PIL import Image
-                                    exec_globals['Image'] = Image
-                                    exec_globals['PIL'] = __import__('PIL')
-                                except ImportError:
-                                    pass
-                                
-                                try:
-                                    import numpy as numpy_lib
-                                    exec_globals['np'] = numpy_lib
-                                    exec_globals['numpy'] = numpy_lib
-                                except ImportError:
-                                    pass
-                                
-                                try:
-                                    import cv2
-                                    exec_globals['cv2'] = cv2
-                                except ImportError:
-                                    pass
-                                
-                                # 添加其他常用的数据科学库
-                                try:
-                                    import pandas as pandas_lib
-                                    exec_globals['pd'] = pandas_lib
-                                    exec_globals['pandas'] = pandas_lib
-                                except ImportError:
-                                    pass
-                                    
-                            except Exception as e:
-                                print(f"⚠️ 部分标准库导入失败: {e}")
-                            
-                            # 添加用户工作空间变量
-                            exec_globals['user_session_id'] = session_id
-                            exec_globals['user_workspace'] = user_workspace
-                            exec_globals['user_uploads_dir'] = user_workspace / "uploads"
-                            exec_globals['user_exports_dir'] = user_workspace / "exports"
-                            exec_globals['user_temp_dir'] = user_workspace / "temp"
-                            exec_globals['Path'] = Path  # 重要：确保Path变量可用
-                            
-                            # 添加文档文件信息（类似Excel的方式）
-                            if hasattr(st.session_state, 'current_doc_path') and st.session_state.current_doc_path:
-                                exec_globals['doc_file_path'] = st.session_state.current_doc_path
-                                exec_globals['doc_file_name'] = st.session_state.get('current_doc_name', 'unknown')
-                            else:
-                                exec_globals['doc_file_path'] = None
-                                exec_globals['doc_file_name'] = "请先选择文档文件"
-                            
-                            # 添加文档分析结果（如果有）
-                            if hasattr(st.session_state, 'document_analysis') and st.session_state.document_analysis:
-                                exec_globals['document_analysis'] = st.session_state.document_analysis
-                                exec_globals['doc_info'] = st.session_state.document_analysis.get('file_info', {})
-                                exec_globals['doc_structure'] = st.session_state.document_analysis.get('structure_analysis', {})
-                            
-                            # 定义文档导出函数（与Excel保持一致）
-                            def save_to_exports(filename, data_or_path):
-                                """将文件保存到用户导出目录"""
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                safe_filename = f"{timestamp}_{filename}"
-                                export_path = user_workspace / "exports" / safe_filename
-                                
-                                # 确保导出目录存在
-                                export_path.parent.mkdir(parents=True, exist_ok=True)
-                                
-                                if isinstance(data_or_path, str) and os.path.exists(data_or_path):
-                                    # 如果是文件路径，复制文件
-                                    import shutil
-                                    shutil.copy2(data_or_path, export_path)
-                                else:
-                                    # 其他情况，尝试写入文本
-                                    with open(export_path, 'w', encoding='utf-8') as f:
-                                        f.write(str(data_or_path))
-                                
-                                print(f"✅ 文件已保存到用户导出目录: {export_path.name}")
-                                return str(export_path)
-                            
-                            def get_temp_path(filename):
-                                """获取临时文件路径"""
-                                temp_path = user_workspace / "temp" / filename
-                                temp_path.parent.mkdir(parents=True, exist_ok=True)
-                                return str(temp_path)
-                            
-                            def get_export_path(filename):
-                                """获取导出文件路径"""
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                                safe_filename = f"{timestamp}_{filename}"
-                                export_path = user_workspace / "exports" / safe_filename
-                                export_path.parent.mkdir(parents=True, exist_ok=True)
-                                return str(export_path)
-                            
-                            # 文件保存拦截器 - 重定向常见的文件保存操作
-                            original_open = open
-                            created_files = []  # 记录创建的文件
-                            
-                            def intercepted_open(file, mode='r', **kwargs):
-                                """拦截open函数，重定向文件保存到用户目录"""
-                                if isinstance(file, str):
-                                    # 检查是否是写入模式
-                                    if 'w' in mode or 'a' in mode or 'x' in mode:
-                                        # 获取文件名
-                                        filename = os.path.basename(file)
-                                        
-                                        # 如果是相对路径或当前目录，重定向到用户导出目录
-                                        if not os.path.isabs(file) or file.startswith('./') or file.startswith('.\\'):
-                                            redirect_path = user_workspace / "exports" / filename
-                                            redirect_path.parent.mkdir(parents=True, exist_ok=True)
-                                            
-                                            print(f"🔄 文件保存重定向: {file} -> {redirect_path}")
-                                            created_files.append(str(redirect_path))
-                                            return original_open(redirect_path, mode, **kwargs)
-                                
-                                return original_open(file, mode, **kwargs)
-                            
-                            # 拦截json.dump方法
-                            import json as json_module
-                            original_json_dump = json_module.dump
-                            def intercepted_json_dump(obj, fp, **kwargs):
-                                """拦截json.dump方法"""
-                                if hasattr(fp, 'name') and isinstance(fp.name, str):
-                                    filename = os.path.basename(fp.name)
-                                    if not os.path.isabs(fp.name):
-                                        redirect_path = user_workspace / "exports" / filename
-                                        redirect_path.parent.mkdir(parents=True, exist_ok=True)
-                                        print(f"🔄 JSON保存重定向: {fp.name} -> {redirect_path}")
-                                        created_files.append(str(redirect_path))
-                                        with original_open(redirect_path, 'w', encoding='utf-8') as f:
-                                            return original_json_dump(obj, f, **kwargs)
-                                return original_json_dump(obj, fp, **kwargs)
-                            
-                            # 应用拦截器
-                            exec_globals['open'] = intercepted_open
-                            exec_globals['json'] = type('json_module', (), {
-                                'dump': intercepted_json_dump,
-                                'dumps': json_module.dumps,
-                                'load': json_module.load,
-                                'loads': json_module.loads
-                            })()
-                            
-                            # 添加函数到执行环境
-                            exec_globals['save_to_exports'] = save_to_exports
-                            exec_globals['get_temp_path'] = get_temp_path
-                            exec_globals['get_export_path'] = get_export_path
-                            exec_globals['created_files'] = created_files  # 让代码可以访问创建的文件列表
                             
                             # 导入文档处理模块
                             try:
                                 from document_analyzer import DocumentAnalyzer
-                                from document_utils import AdvancedDocumentProcessor, DocumentSearchEngine, DocumentUtils
+                                from document_utils import AdvancedDocumentProcessor, DocumentSearchEngine
                                 exec_globals['DocumentAnalyzer'] = DocumentAnalyzer
                                 exec_globals['AdvancedDocumentProcessor'] = AdvancedDocumentProcessor
                                 exec_globals['DocumentSearchEngine'] = DocumentSearchEngine
-                                exec_globals['DocumentUtils'] = DocumentUtils  # 添加DocumentUtils别名
                             except ImportError as e:
                                 st.error(f"❌ 导入文档处理模块失败: {str(e)}")
                                 return
                             
-                            # 替换当前文档路径（但不破坏变量声明）
-                            if hasattr(st.session_state, 'current_doc_path') and st.session_state.current_doc_path:
+                            # 替换当前文档路径
+                            if hasattr(st.session_state, 'current_doc_path'):
                                 doc_code_input = doc_code_input.replace('current_document_path', st.session_state.current_doc_path)
                                 doc_code_input = doc_code_input.replace('"current_document_path"', f'"{st.session_state.current_doc_path}"')
-                                # 不替换 doc_file_path 变量名，因为它已经在 exec_globals 中设置了
+                            
+                            # 执行代码
+                            exec_output = io.StringIO()
                             
                             # 重定向print输出
                             import sys
-                            from io import StringIO
                             old_stdout = sys.stdout
-                            sys.stdout = mystdout = StringIO()
+                            sys.stdout = exec_output
                             
                             try:
                                 exec(doc_code_input, exec_globals)
+                                result = exec_output.getvalue()
                                 
-                                # 恢复输出
-                                sys.stdout = old_stdout
-                                output = mystdout.getvalue()
-                                
-                                # 检测生成的文件
-                                generated_files = created_files.copy()
-                                
-                                # 额外检查导出目录中的新文件
-                                exports_dir = user_workspace / "exports"
-                                if exports_dir.exists():
-                                    # 获取5分钟内创建的文件
-                                    import time
-                                    current_time = time.time()
-                                    recent_files = []
-                                    
-                                    for file_path in exports_dir.iterdir():
-                                        if file_path.is_file():
-                                            file_mtime = file_path.stat().st_mtime
-                                            if current_time - file_mtime < 300:  # 5分钟内
-                                                file_path_str = str(file_path)
-                                                if file_path_str not in generated_files:
-                                                    recent_files.append(file_path_str)
-                                    
-                                    generated_files.extend(recent_files)
-                                
-                                # 显示执行结果
-                                st.success("✅ 文档处理代码执行成功")
-                                
-                                if output:
-                                    st.subheader("📄 执行输出:")
-                                    st.code(output, language="text")
+                                if result:
+                                    st.subheader("📋 执行结果")
+                                    st.text(result)
                                 else:
-                                    st.info("📋 代码执行完成（无控制台输出）")
-                                
-                                # 处理生成的文件
-                                if generated_files:
-                                    st.subheader("📁 生成的文件")
-                                    st.success(f"🎉 检测到 {len(generated_files)} 个生成的文件")
-                                    
-                                    # 分类显示文件
-                                    json_files = [f for f in generated_files if f.lower().endswith('.json')]
-                                    md_files = [f for f in generated_files if f.lower().endswith(('.md', '.markdown'))]
-                                    txt_files = [f for f in generated_files if f.lower().endswith('.txt')]
-                                    docx_files = [f for f in generated_files if f.lower().endswith('.docx')]
-                                    pdf_files = [f for f in generated_files if f.lower().endswith('.pdf')]
-                                    other_files = [f for f in generated_files if f not in json_files + md_files + txt_files + docx_files + pdf_files]
-                                    
-                                    # 显示不同类型的文件
-                                    if json_files:
-                                        st.markdown("**📄 JSON数据文件:**")
-                                        for json_file in json_files:
-                                            file_name = os.path.basename(json_file)
-                                            with open(json_file, 'rb') as f:
-                                                st.download_button(
-                                                    f"📥 下载 {file_name}",
-                                                    f.read(),
-                                                    file_name,
-                                                    "application/json",
-                                                    key=f"download_json_{file_name}"
-                                                )
-                                    
-                                    if md_files:
-                                        st.markdown("**📝 Markdown报告文件:**")
-                                        for md_file in md_files:
-                                            file_name = os.path.basename(md_file)
-                                            with open(md_file, 'r', encoding='utf-8') as f:
-                                                content = f.read()
-                                                st.download_button(
-                                                    f"📥 下载 {file_name}",
-                                                    content,
-                                                    file_name,
-                                                    "text/markdown",
-                                                    key=f"download_md_{file_name}"
-                                                )
-                                    
-                                    if txt_files:
-                                        st.markdown("**📄 文本文件:**")
-                                        for txt_file in txt_files:
-                                            file_name = os.path.basename(txt_file)
-                                            with open(txt_file, 'r', encoding='utf-8') as f:
-                                                content = f.read()
-                                                st.download_button(
-                                                    f"📥 下载 {file_name}",
-                                                    content,
-                                                    file_name,
-                                                    "text/plain",
-                                                    key=f"download_txt_{file_name}"
-                                                )
-                                    
-                                    if docx_files:
-                                        st.markdown("**📄 Word文档文件:**")
-                                        for docx_file in docx_files:
-                                            file_name = os.path.basename(docx_file)
-                                            with open(docx_file, 'rb') as f:
-                                                st.download_button(
-                                                    f"📥 下载 {file_name}",
-                                                    f.read(),
-                                                    file_name,
-                                                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                                                    key=f"download_docx_{file_name}"
-                                                )
-                                    
-                                    if pdf_files:
-                                        st.markdown("**📄 PDF文件:**")
-                                        for pdf_file in pdf_files:
-                                            file_name = os.path.basename(pdf_file)
-                                            with open(pdf_file, 'rb') as f:
-                                                st.download_button(
-                                                    f"📥 下载 {file_name}",
-                                                    f.read(),
-                                                    file_name,
-                                                    "application/pdf",
-                                                    key=f"download_pdf_{file_name}"
-                                                )
-                                    
-                                    if other_files:
-                                        st.markdown("**📁 其他文件:**")
-                                        for other_file in other_files:
-                                            file_name = os.path.basename(other_file)
-                                            with open(other_file, 'rb') as f:
-                                                st.download_button(
-                                                    f"📥 下载 {file_name}",
-                                                    f.read(),
-                                                    file_name,
-                                                    "application/octet-stream",
-                                                    key=f"download_other_{file_name}"
-                                                )
-                                    
-                                    st.info("💡 所有生成的文件已保存到您的专属导出目录，您也可以在'🛠️ 数据工具'标签页中管理这些文件")
-                                    
-                                else:
-                                    st.info("📋 代码执行完成，未检测到文件生成")
+                                    st.success("✅ 代码执行完成（无输出）")
                                     
                             finally:
                                 sys.stdout = old_stdout
                                 
                         except Exception as e:
                             st.error(f"❌ 代码执行错误: {str(e)}")
-                            
-                            # 提供更详细的错误信息
-                            import traceback
-                            error_details = traceback.format_exc()
-                            
-                            # 检查是否是Path相关错误
-                            if "Path" in str(e):
-                                st.error("🔍 Path变量错误详情:")
-                                st.code(error_details, language="text")
-                                st.info("💡 解决建议: 请确保代码中正确使用Path变量，例如:")
-                                st.code("""
-# 正确的Path使用方式:
-from pathlib import Path
-
-# 或者直接使用字符串路径:
-import os
-if os.path.exists(doc_file_path):
-    # 处理文档...
-""", language="python")
-                            else:
-                                st.error("请检查代码语法和逻辑")
-                                with st.expander("🔍 查看详细错误信息"):
-                                    st.code(error_details, language="text")
+                            st.error("请检查代码语法和逻辑")
                 else:
                     st.warning("⚠️ 请输入要执行的代码")
         
