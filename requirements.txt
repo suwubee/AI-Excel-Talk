@@ -17,6 +17,8 @@ pymupdf>=1.23.0         # 更强大的PDF处理（fitz）
 Pillow>=9.0.0           # 图像处理
 
 # 文档分析的可选依赖（提升处理能力）
-pdfplumber>=0.9.0       # PDF表格和布局分析
-docx2txt>=0.8           # DOCX纯文本提取
-textract>=1.6.5         # 多格式文档提取（可选） 
+pdfplumber>=0.9.0           # PDF表格和布局分析
+docx2txt>=0.8               # DOCX纯文本提取
+
+# 移除有问题的依赖
+# textract>=1.6.5           # 多格式文档提取（有版本冲突，已移除） 
