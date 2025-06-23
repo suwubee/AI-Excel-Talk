@@ -69,7 +69,7 @@ python run_multiuser.py --port 8502 --debug
    - **📊 Excel分析** - 上传Excel文件进行数据分析
    - **📄 文档分析** - 上传DOCX/PDF文件进行文档分析
 
-### 4. 文档分析功能（新增）
+### 4. 📄 文档分析功能（完整功能模块）
 ```bash
 # 安装文档分析依赖
 pip install markitdown[all] python-docx pymupdf pdfplumber
@@ -81,6 +81,13 @@ python install_document_dependencies.py
 **支持的文档格式**：
 - 📄 `.docx` - Word文档结构分析、内容提取
 - 📄 `.pdf` - PDF文档解析、文本提取、表格识别
+
+**功能与Excel分析保持完全一致**：
+- **📄 文档预览** - MarkItDown清洗后的标准化预览
+- **🏗️ 结构分析** - 段落、标题层级、格式统计分析
+- **🤖 AI智能分析** - 文档用途识别和内容分析
+- **💻 代码执行** - 带变量标签的Python代码环境
+- **🛠️ 文档工具** - 搜索分析、统计和导出文件管理
 
 ### 🆕 v2.2.0 新功能快速体验
 
@@ -156,11 +163,19 @@ docker run -p 8501:8501 -v $(pwd)/user_uploads:/app/user_uploads ai-excel-tool
 - **🔒 安全沙箱** - 隔离执行环境，防止恶意代码影响系统
 - **📁 智能文件拦截** - 自动重定向文件保存，提供分类下载链接
 
-#### 4. 🛠️ **数据工具箱** - 全流程数据处理
+#### 4. 🛠️ **数据/文档工具箱** - 全流程数据处理
 - **🧹 数据清洗** - 缺失值处理、重复数据清理、数据类型优化
 - **📈 统计分析** - 描述性统计、分组分析、相关性分析
+- **🔍 文档搜索** - 关键词搜索、批量搜索、上下文分析
 - **📤 智能导出** - 支持Excel、JSON、Markdown等多种格式
 - **📂 文件管理** - 用户专属空间，版本控制，自动归档
+
+#### 5. 📄 **文档分析模块** - 与Excel分析功能完全对标 🆕
+- **📄 文档预览** - MarkItDown技术清除格式，保留结构，便于AI理解
+- **🏗️ 结构化分析** - 段落统计、标题层级分析、字体格式识别
+- **🤖 AI文档分析** - 文档用途识别、内容总结、关键信息提取
+- **💻 代码执行环境** - 带文档变量标签的Python运行时
+- **🛠️ 文档工具** - 搜索分析、文档统计、导出文件管理
 
 ### 🔥 重点功能详解
 
@@ -192,12 +207,36 @@ AI输出：
 🎨 可视化：推荐地理热力图 + 时序折线图 + KPI仪表板
 ```
 
+#### **统一的变量标签和AI提示词系统** 🆕
+```python
+# Excel分析 - 可用变量标签展示
+📊 可用的Excel数据和文件:
+- df_工作表名: DataFrame变量 (如 df_销售数据, df_Sheet1)  
+- excel_file_path: 原始Excel文件路径
+- excel_file_name: 文件名
+- sheet_names: 工作表名称列表
+- sheet_info: 工作表结构信息
+
+# 文档分析 - 可用变量标签展示  
+📄 可用的文档数据和文件:
+- document_path: 原始文档文件路径
+- document_name: 文件名
+- document_type: 文档类型 (DOCX/PDF)
+- document_data: 文档分析数据
+- file_info: 文件基本信息
+- structure_analysis: 结构分析结果
+
+# AI提示词自动包含变量标签信息
+AI代码生成会自动获得这些变量信息，提供精准的代码建议
+```
+
 #### **智能文件拦截系统** 
 ```python
 # 代码中的任何文件保存操作都会被自动拦截并重定向：
 df.to_excel("分析结果.xlsx")                    # 自动重定向到用户目录
 with open("报告.json", "w") as f: ...           # 自动拦截并分类
 with open("分析.md", "w") as f: ...             # 提供直接下载链接
+save_to_exports("文档分析.json", analysis_data)  # 专用保存函数（适用于文档分析）
 import matplotlib.pyplot as plt
 plt.savefig("图表.png")                         # 自动保存到用户空间
 ```

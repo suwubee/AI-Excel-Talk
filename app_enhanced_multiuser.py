@@ -18,6 +18,7 @@ import traceback
 import tempfile
 import os
 import hashlib
+import base64
 from pathlib import Path
 import streamlit.components.v1 as components
 from user_session_manager import UserSessionManager, UserConfigManager
@@ -1514,6 +1515,11 @@ def check_localStorage_and_restore(session_id: str):
 def main():
     """主应用程序"""
     
+    # 避免Path变量作用域问题 - 在main函数开始处重新导入
+    from pathlib import Path as PathLib
+    global Path
+    Path = PathLib
+    
     # 初始化用户会话管理器
     if 'session_manager' not in st.session_state:
         st.session_state.session_manager = UserSessionManager(
@@ -2025,9 +2031,9 @@ def main():
             
             if selected_file_text and st.button("📊 加载选择的文件", type="primary"):
                 try:
-                    from pathlib import Path  # 确保Path可用
+                    from pathlib import Path as PathClass  # 使用别名避免冲突
                     selected_file_info = file_details[selected_file_text]
-                    file_path = Path(selected_file_info['path'])
+                    file_path = PathClass(selected_file_info['path'])
                     
                     with st.spinner("📤 正在加载已有文件..."):
                         # 加载Excel数据
@@ -2084,9 +2090,9 @@ def main():
             
             if selected_file_text and st.button("📄 加载选择的文档", type="primary"):
                 try:
-                    from pathlib import Path
+                    from pathlib import Path as PathClass
                     selected_file_info = file_details[selected_file_text]
-                    file_path = Path(selected_file_info['path'])
+                    file_path = PathClass(selected_file_info['path'])
                     
                     with st.spinner("📤 正在加载已有文档..."):
                         # 加载文档数据
@@ -2717,8 +2723,8 @@ print()
 # 用户工作空间操作函数
 def save_to_exports(filename, data_or_path):
     '''将文件保存到用户导出目录'''
-    from datetime import datetime
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    from datetime import datetime as dt
+    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
     safe_filename = f"{{timestamp}}_{{filename}}"
     export_path = user_exports_dir / safe_filename
     
@@ -2872,7 +2878,10 @@ print("="*50)
                                 'px': px,
                                 'go': go,
                                 'st': st,
-                                'os': os
+                                'os': os,
+                                'datetime': datetime,
+                                're': re,
+                                'traceback': traceback
                             }
                             
                             # 添加所有Excel工作表数据
@@ -2900,7 +2909,6 @@ print("="*50)
                             }
                             
                             # 添加用户工作空间相关变量和函数
-                            from pathlib import Path
                             user_workspace = session_manager.get_user_workspace(session_id)
                             
                             exec_globals['user_session_id'] = session_id
@@ -2908,12 +2916,13 @@ print("="*50)
                             exec_globals['user_uploads_dir'] = user_workspace / "uploads"
                             exec_globals['user_exports_dir'] = user_workspace / "exports"
                             exec_globals['user_temp_dir'] = user_workspace / "temp"
-                            exec_globals['Path'] = Path
+                            exec_globals['Path'] = Path  # 使用顶部导入的Path
                             
                             # 定义用户工作空间操作函数
                             def save_to_exports(filename, data_or_path):
                                 """将文件保存到用户导出目录"""
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                from datetime import datetime as dt
+                                timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
                                 safe_filename = f"{timestamp}_{filename}"
                                 export_path = user_workspace / "exports" / safe_filename
                                 
@@ -2945,7 +2954,8 @@ print("="*50)
                             
                             def get_export_path(filename):
                                 """获取导出文件路径"""
-                                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                                from datetime import datetime as dt
+                                timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
                                 safe_filename = f"{timestamp}_{filename}"
                                 export_path = user_workspace / "exports" / safe_filename
                                 export_path.parent.mkdir(parents=True, exist_ok=True)
@@ -2989,8 +2999,8 @@ print("="*50)
                                 return original_to_excel(self, excel_writer, **kwargs)
                             
                             # 拦截json.dump方法
-                            import json
-                            original_json_dump = json.dump
+                            import json as json_builtin
+                            original_json_dump = json_builtin.dump
                             def intercepted_json_dump(obj, fp, **kwargs):
                                 """拦截json.dump方法"""
                                 if hasattr(fp, 'name') and isinstance(fp.name, str):
@@ -3008,9 +3018,9 @@ print("="*50)
                             exec_globals['open'] = intercepted_open
                             exec_globals['json'] = type('json_module', (), {
                                 'dump': intercepted_json_dump,
-                                'dumps': json.dumps,
-                                'load': json.load,
-                                'loads': json.loads
+                                'dumps': json_builtin.dumps,
+                                'load': json_builtin.load,
+                                'loads': json_builtin.loads
                             })()
                             
                             # 临时替换pandas方法
@@ -3220,7 +3230,8 @@ print("="*50)
                             except:
                                 pass
                             st.error(f"❌ 代码执行错误: {str(e)}")
-                            st.code(f"错误详情:\n{traceback.format_exc()}", language="text")
+                            import traceback as tb_module
+                            st.code(f"错误详情:\n{tb_module.format_exc()}", language="text")
                 
                 with col_clear:
                     if st.button("🗑️ 清空", use_container_width=True):
@@ -3922,117 +3933,360 @@ print("="*50)
                 except Exception as e:
                     st.error(f"❌ AI分析器初始化失败: {str(e)}")
         
-        # Tab 3: 代码执行
+        # Tab 3: 代码执行（与Excel保持一致）
         with doc_tab3:
-            st.header("💻 文档代码执行")
+            st.header("💻 文档 代码执行环境")
+            st.info("🔐 您的代码在隔离环境中执行，数据完全私有")
             
-            if not api_key:
-                st.warning("⚠️ AI代码生成需要配置API Key")
-            else:
+            if st.session_state.document_data:
+                # 显示可用的文档数据和文件信息
+                st.subheader("📄 可用的文档数据和文件")
+                
+                # 数据变量信息
+                col_info1, col_info2 = st.columns(2)
+                
+                with col_info1:
+                    st.markdown("**📄 可用的文档分析变量:**")
+                    file_info = st.session_state.document_data.get('file_info', {})
+                    st.code(f"document_analyzer  # 文档分析器实例")
+                    st.code(f"document_processor  # 高级文档处理器实例")
+                    st.code(f"search_engine  # 文档搜索引擎实例")
+                    
+                    st.markdown("**📁 原始文档文件访问:**")
+                    if hasattr(st.session_state, 'current_doc_name') and st.session_state.current_doc_name:
+                        st.code(f"document_path  # 原始文档文件路径")
+                        st.code(f"document_name  # 文件名: {st.session_state.current_doc_name}")
+                        st.code(f"document_type  # 文档类型: {file_info.get('type', 'Unknown').upper()}")
+                    else:
+                        st.info("选择或上传文档后可获得文件路径变量")
+                
+                with col_info2:
+                    st.markdown("**🔧 可用的库:**")
+                    st.code("os  # 文件操作\njson  # JSON处理\nre  # 正则表达式\nbase64  # 编码解码")
+                    
+                    st.markdown("**📊 文档分析信息:**")
+                    st.code(f"document_data  # 完整文档分析数据字典\nfile_info  # 文件基本信息\nstructure_analysis  # 结构分析结果")
+                
+                # 代码编辑器
+                st.subheader("🖥️ Python代码编辑器")
+                
+                # 默认代码模板 - 包含文档文件操作
+                default_doc_code = f"""# 文档分析和处理代码 - 多用户环境
+import os
+import json
+import re
+from pathlib import Path
+from document_analyzer import DocumentAnalyzer
+from document_utils import AdvancedDocumentProcessor, DocumentSearchEngine
+
+# ===========================================
+# 🔐 用户工作空间信息（多用户隔离环境）
+# ===========================================
+
+# 当前用户会话ID
+user_session_id = "{session_id}"
+
+# 用户工作空间路径
+user_workspace = Path(r"{session_manager.get_user_workspace(session_id)}")
+user_uploads_dir = user_workspace / "uploads"
+user_exports_dir = user_workspace / "exports"  # 导出文件请保存到这里
+user_temp_dir = user_workspace / "temp"
+
+print("🔐 用户工作空间信息:")
+print(f"   会话ID: {{user_session_id}}")
+print(f"   工作空间: {{user_workspace}}")
+print(f"   上传目录: {{user_uploads_dir}}")
+print(f"   导出目录: {{user_exports_dir}}")
+print(f"   临时目录: {{user_temp_dir}}")
+print()
+
+# 用户工作空间操作函数
+def save_to_exports(filename, data_or_content):
+    '''将文件保存到用户导出目录'''
+    from datetime import datetime as dt
+    import json as json_module
+    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+    safe_filename = f"{{timestamp}}_{{filename}}"
+    export_path = user_exports_dir / safe_filename
+    
+    if isinstance(data_or_content, str):
+        # 文本内容，直接写入
+        with open(export_path, 'w', encoding='utf-8') as f:
+            f.write(data_or_content)
+    elif isinstance(data_or_content, dict):
+        # 字典数据，保存为JSON
+        if not filename.endswith('.json'):
+            export_path = user_exports_dir / f"{{timestamp}}_{{filename}}.json"
+        with open(export_path, 'w', encoding='utf-8') as f:
+            json_module.dump(data_or_content, f, ensure_ascii=False, indent=2)
+    elif hasattr(data_or_content, '__iter__'):
+        # 可迭代对象，转换为文本
+        with open(export_path, 'w', encoding='utf-8') as f:
+            for item in data_or_content:
+                f.write(str(item) + "\\n")
+    else:
+        # 其他情况，转换为字符串
+        with open(export_path, 'w', encoding='utf-8') as f:
+            f.write(str(data_or_content))
+    
+    print(f"✅ 文件已保存到用户导出目录: {{export_path.name}}")
+    return str(export_path)
+
+def get_temp_path(filename):
+    '''获取临时文件路径'''
+    return str(user_temp_dir / filename)
+
+# ===========================================
+# 📄 原始文档文件信息
+# ==========================================="""
+                
+                # 添加当前文档信息
+                if hasattr(st.session_state, 'current_doc_path') and st.session_state.current_doc_path:
+                    default_doc_code += f"""
+# 当前文档文件信息
+document_path = r"{st.session_state.current_doc_path}"
+document_name = "{st.session_state.get('current_doc_name', 'unknown.docx')}"
+document_type = "{file_info.get('type', 'Unknown').upper()}"
+
+print("📄 当前文档文件信息:")
+print(f"   文件路径: {{document_path}}")
+print(f"   文件名: {{document_name}}")
+print(f"   文档类型: {{document_type}}")
+print()"""
+                else:
+                    default_doc_code += f"""
+# 文档文件信息（需要先选择或上传文档）
+document_path = None
+document_name = "请先选择文档文件"
+document_type = "Unknown"
+
+print("⚠️  请先在'📁 上传文档文件'部分选择或上传文档文件")
+print()"""
+                
+                default_doc_code += f"""
+# ===========================================
+# 📋 文档数据概览
+# ===========================================
+
+# 初始化文档处理器
+document_analyzer = DocumentAnalyzer()
+document_processor = AdvancedDocumentProcessor()
+
+# 文档基本信息
+file_info = {{
+    'name': document_name,
+    'type': document_type.lower(),
+    'path': document_path
+}}
+
+print("📊 文档概览:")
+if document_path:
+    print(f"文档名称: {{file_info['name']}}")
+    print(f"文档类型: {{file_info['type']}}")
+    print(f"文档路径: {{file_info['path']}}")
+    
+    # 如果文档已加载，显示分析数据概览
+    try:
+        # 获取当前文档分析数据（从session state）
+        document_data = {st.session_state.document_data}  # 完整分析数据
+        structure_analysis = document_data.get('structure_analysis', {{}})
+        
+        print("\\n📋 文档结构概览:")
+        if document_type == 'DOCX':
+            print(f"段落数: {{structure_analysis.get('total_paragraphs', 0)}}")
+            print(f"表格数: {{structure_analysis.get('tables_count', 0)}}")
+            print(f"图片数: {{structure_analysis.get('images_count', 0)}}")
+        elif document_type == 'PDF':
+            print(f"页数: {{structure_analysis.get('total_pages', 0)}}")
+            print(f"图片数: {{structure_analysis.get('images_count', 0)}}")
+        
+        headings = structure_analysis.get('headings', {{}})
+        if headings:
+            print("\\n📑 标题层级:")
+            for level, heading_list in headings.items():
+                print(f"  {{level}}: {{len(heading_list)}}个")
+    except:
+        print("  (需要重新分析文档以获取详细信息)")
+else:
+    print("  请先选择或上传文档文件")
+
+print()
+
+# ===========================================
+# 💡 使用示例和最佳实践
+# ===========================================
+
+# 示例1: 文档搜索和分析
+print("\\n" + "="*50)
+print("💡 示例1: 文档搜索分析")
+print("="*50)
+
+if document_path:
+    # 初始化搜索引擎
+    search_engine = DocumentSearchEngine(document_processor)
+    
+    # 搜索关键词示例
+    search_keyword = "重要信息"  # 修改为您要搜索的关键词
+    print(f"搜索关键词: {{search_keyword}}")
+    
+    # search_results = search_engine.search_content(search_keyword, context_lines=3)
+    # print(f"找到 {{len(search_results)}} 个匹配结果")
+
+# 示例2: 批量关键词搜索
+print("\\n" + "="*50)
+print("💡 示例2: 批量关键词搜索")
+print("="*50)
+keywords = ["合同编号", "甲方", "乙方", "金额", "日期"]
+print(f"批量搜索关键词: {{keywords}}")
+
+# 示例3: 文档分析结果导出
+print("\\n" + "="*50)
+print("💡 示例3: 分析结果导出到用户目录")
+print("="*50)
+
+# 导出到用户导出目录（推荐方式）
+# analysis_summary = "文档分析摘要内容..."
+# save_to_exports("文档分析报告.md", analysis_summary)
+
+# 导出搜索结果
+# search_report = {{"keywords": keywords, "results": search_results}}
+# save_to_exports("搜索结果.json", search_report)
+
+print("\\n" + "="*50)
+print("🔐 数据安全提醒:")
+print("- 所有文件自动保存到您的专属工作空间")
+print("- 使用 save_to_exports() 函数将结果保存到导出目录")
+print("- 导出的文件可在'搜索工具'标签页下载")
+print("="*50)
+
+# ===========================================
+# 🚀 开始您的文档分析
+# ===========================================
+
+# 在这里编写您的分析代码
+# 记住：
+# 1. 使用 document_analyzer、document_processor、search_engine 进行分析
+# 2. 导出文件使用 save_to_exports() 函数
+# 3. 所有操作都在您的专属隔离环境中进行
+
+# 文档分析示例：
+if document_path:
+    print("\\n🚀 开始文档分析...")
+    
+    # 1. 分析文档结构
+    # analysis_result = document_analyzer.analyze_document(document_path)
+    
+    # 2. 搜索关键信息
+    # search_results = search_engine.search_content("关键词", context_lines=3)
+    
+    # 3. 导出分析结果
+    # save_to_exports("分析结果.json", analysis_result)
+    
+    print("✅ 文档分析完成！请在上方编写具体的分析代码。")
+else:
+    print("⚠️  请先选择或上传文档文件，然后重新运行代码。")
+"""
+                
+                # 检查是否有保存的代码
+                if 'doc_code_input' not in st.session_state:
+                    st.session_state.doc_code_input = default_doc_code
+                
                 # AI代码生成助手
-                col_doc_ai, col_doc_manual = st.columns([1, 1])
+                col_doc_ai, col_doc_clear = st.columns([3, 1])
                 
                 with col_doc_ai:
                     if st.button("🤖 AI助手", use_container_width=True, help="使用AI生成文档处理代码"):
                         st.session_state.show_doc_ai_helper = not st.session_state.get('show_doc_ai_helper', False)
                         st.rerun()
                 
-                # AI代码生成助手
+                with col_doc_clear:
+                    if st.button("🗑️ 清空", use_container_width=True, help="清空代码编辑器"):
+                        st.session_state.doc_code_input = ""
+                        st.rerun()
+                
+                # AI代码生成助手 - 增强版，包含完整文档信息
                 if st.session_state.get('show_doc_ai_helper', False):
                     with st.expander("🤖 AI文档代码生成助手", expanded=True):
-                        try:
-                            from document_ai_analyzer import EnhancedDocumentAIAnalyzer
-                            doc_ai_analyzer = EnhancedDocumentAIAnalyzer(api_key, base_url, selected_model)
-                            
-                            task_description = st.text_area(
-                                "描述您需要完成的文档处理任务",
-                                placeholder="例如：搜索所有包含'合同编号'的段落并提取上下文、分析文档中的关键信息、生成文档摘要等...",
-                                height=100,
-                                key="doc_ai_task"
-                            )
-                            
-                            if st.button("🔮 AI生成代码", type="primary", use_container_width=True):
-                                if task_description.strip():
-                                    with st.spinner("🤖 AI正在生成代码..."):
-                                        generated_code = doc_ai_analyzer.generate_document_code_solution(
-                                            task_description,
-                                            st.session_state.document_data,
-                                            st.session_state.current_doc_name
-                                        )
-                                        st.session_state.doc_generated_code = generated_code
-                                        st.success("✅ 代码生成完成！")
-                                        st.rerun()
-                                else:
-                                    st.warning("⚠️ 请描述您的任务需求")
-                        except ImportError:
-                            st.error("❌ 无法导入文档AI分析器")
-                        except Exception as e:
-                            st.error(f"❌ AI代码生成失败: {str(e)}")
-            
-            # 显示生成的代码
-            if 'doc_generated_code' in st.session_state:
-                st.subheader("🔮 AI生成的代码")
-                st.code(st.session_state.doc_generated_code, language='python')
+                        if not api_key:
+                            st.warning("⚠️ 请先配置OpenAI API Key")
+                        else:
+                            try:
+                                from document_ai_analyzer import EnhancedDocumentAIAnalyzer
+                                doc_ai_analyzer = EnhancedDocumentAIAnalyzer(api_key, base_url, selected_model)
+                                
+                                # 提供更详细的任务描述输入
+                                col_task, col_context = st.columns([2, 1])
+                                
+                                with col_task:
+                                    task_description = st.text_area(
+                                        "描述您需要完成的文档处理任务",
+                                        placeholder="例如：搜索所有包含'合同编号'的段落并提取上下文、分析文档中的关键信息、生成文档摘要、批量搜索多个关键词等...",
+                                        height=100,
+                                        key="doc_ai_task"
+                                    )
+                                
+                                with col_context:
+                                    st.markdown("**💡 任务示例**")
+                                    st.code("搜索合同中所有金额信息")
+                                    st.code("提取文档标题层级结构")
+                                    st.code("分析文档中的日期模式")
+                                    st.code("批量搜索关键条款")
+                                
+                                if st.button("🔮 AI生成代码", type="primary", use_container_width=True):
+                                    if task_description.strip():
+                                        with st.spinner("🤖 AI正在生成代码..."):
+                                            generated_code = doc_ai_analyzer.generate_document_code_solution(
+                                                task_description,
+                                                st.session_state.document_data,
+                                                st.session_state.current_doc_name
+                                            )
+                                            st.session_state.doc_generated_code = generated_code
+                                            st.success("✅ 代码生成完成！")
+                                            st.rerun()
+                                    else:
+                                        st.warning("⚠️ 请描述您的任务需求")
+                                        
+                            except ImportError:
+                                st.error("❌ 无法导入文档AI分析器")
+                            except Exception as e:
+                                st.error(f"❌ AI代码生成失败: {str(e)}")
                 
-                if st.button("📋 复制到编辑器", use_container_width=True):
-                    st.session_state.doc_code_input = st.session_state.doc_generated_code
-                    st.success("✅ 代码已复制到编辑器")
-                    st.rerun()
+                # 显示生成的代码
+                if 'doc_generated_code' in st.session_state:
+                    st.subheader("🔮 AI生成的代码")
+                    with st.expander("查看生成的代码", expanded=False):
+                        st.code(st.session_state.doc_generated_code, language='python')
+                        
+                        col_copy, col_clear = st.columns(2)
+                        with col_copy:
+                            if st.button("📋 复制到编辑器", use_container_width=True):
+                                st.session_state.doc_code_input = st.session_state.doc_generated_code
+                                st.success("✅ 代码已复制到编辑器")
+                                st.rerun()
+                        with col_clear:
+                            if st.button("🗑️ 清除生成的代码", use_container_width=True):
+                                del st.session_state.doc_generated_code
+                                st.rerun()
+                
+                doc_code_input = st.text_area(
+                    "输入Python代码",
+                    value=st.session_state.get('doc_code_input', default_doc_code),
+                    height=400,
+                    key="doc_code_editor"
+                )
             
-            # 代码编辑器
-            st.subheader("📝 Python代码编辑器")
-            
-            # 提供示例代码
-            default_doc_code = '''# 文档分析示例代码
-from document_analyzer import DocumentAnalyzer
-from document_utils import AdvancedDocumentProcessor
-
-# 初始化处理器
-processor = AdvancedDocumentProcessor()
-
-# 分析文档（文件路径会自动替换）
-doc_path = "current_document_path"
-analysis_result = processor.load_document(doc_path)
-
-# 获取文档基本信息
-file_info = analysis_result["file_info"]
-print(f"文档名: {file_info['name']}")
-print(f"类型: {file_info['type']}")
-print(f"大小: {file_info['size_mb']} MB")
-
-# 搜索关键词示例
-keyword = "重要信息"  # 修改为您要搜索的关键词
-search_results = processor.search_content(keyword, context_lines=2)
-
-print(f"\\n=== 搜索关键词: {keyword} ===")
-for i, result in enumerate(search_results, 1):
-    print(f"结果 {i}:")
-    print(f"  位置: 第{result['line_number']}行")
-    print(f"  内容: {result['matched_line']}")
-    print(f"  上下文:\\n{result['context']}")
-    print("-" * 50)
-
-# 导出分析结果
-json_file, md_file = processor.export_analysis_result()
-print(f"\\n分析结果已导出:")
-print(f"JSON文件: {json_file}")
-print(f"报告文件: {md_file}")
-'''
-            
-            doc_code_input = st.text_area(
-                "输入Python代码",
-                value=st.session_state.get('doc_code_input', default_doc_code),
-                height=300,
-                key="doc_code_editor"
-            )
-            
-            if st.button("🚀 执行文档分析代码", type="primary", use_container_width=True):
-                if doc_code_input.strip():
-                    with st.spinner("🔄 正在执行代码..."):
+                # 执行按钮和清空按钮
+                col_exec, col_clear_code = st.columns([3, 1])
+                
+                with col_exec:
+                    if st.button("▶️ 执行文档代码", type="primary", use_container_width=True):
                         try:
-                            # 创建安全的执行环境
+                            # 准备执行环境 - 包含文档分析工具和文件访问
                             exec_globals = {
-                                '__builtins__': __builtins__,
+                                'os': os,
+                                're': re,
+                                'datetime': datetime,
+                                'base64': base64,
                                 'print': print,
                                 'len': len,
                                 'str': str,
@@ -4053,28 +4307,82 @@ print(f"报告文件: {md_file}")
                                 exec_globals['DocumentSearchEngine'] = DocumentSearchEngine
                             except ImportError as e:
                                 st.error(f"❌ 导入文档处理模块失败: {str(e)}")
+                                st.error("请确保document_analyzer.py和document_utils.py文件存在")
                                 return
                             
-                            # 替换当前文档路径
-                            if hasattr(st.session_state, 'current_doc_path'):
-                                doc_code_input = doc_code_input.replace('current_document_path', st.session_state.current_doc_path)
-                                doc_code_input = doc_code_input.replace('"current_document_path"', f'"{st.session_state.current_doc_path}"')
+                            # 添加文档文件信息
+                            if hasattr(st.session_state, 'current_doc_path') and st.session_state.current_doc_path:
+                                exec_globals['document_path'] = st.session_state.current_doc_path
+                                exec_globals['document_name'] = st.session_state.get('current_doc_name', 'unknown.docx')
+                                exec_globals['document_type'] = file_info.get('type', 'Unknown').upper()
+                            else:
+                                exec_globals['document_path'] = None
+                                exec_globals['document_name'] = "请先选择文档文件"
+                                exec_globals['document_type'] = "Unknown"
                             
-                            # 执行代码
-                            exec_output = io.StringIO()
+                            # 添加文档分析数据
+                            exec_globals['document_data'] = st.session_state.document_data
+                            exec_globals['file_info'] = st.session_state.document_data.get('file_info', {})
+                            exec_globals['structure_analysis'] = st.session_state.document_data.get('structure_analysis', {})
                             
-                            # 重定向print输出
+                            # 用户工作空间信息
+                            exec_globals['user_session_id'] = session_id
+                            exec_globals['user_workspace'] = Path(session_manager.get_user_workspace(session_id))
+                            exec_globals['user_exports_dir'] = Path(session_manager.get_user_workspace(session_id)) / "exports"
+                            exec_globals['Path'] = Path  # 使用顶部导入的Path
+                            
+                            # 保存函数 - 文档版本
+                            def save_to_exports(filename, data_or_content):
+                                """将文件保存到用户导出目录"""
+                                from datetime import datetime as dt
+                                import json as json_module
+                                timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+                                safe_filename = f"{timestamp}_{filename}"
+                                export_path = Path(session_manager.get_user_workspace(session_id)) / "exports" / safe_filename
+                                export_path.parent.mkdir(parents=True, exist_ok=True)
+                                
+                                if isinstance(data_or_content, str):
+                                    # 文本内容，直接写入
+                                    with open(export_path, 'w', encoding='utf-8') as f:
+                                        f.write(data_or_content)
+                                elif isinstance(data_or_content, dict):
+                                    # 字典数据，保存为JSON
+                                    if not filename.endswith('.json'):
+                                        export_path = export_path.parent / f"{timestamp}_{filename}.json"
+                                    with open(export_path, 'w', encoding='utf-8') as f:
+                                        json_module.dump(data_or_content, f, ensure_ascii=False, indent=2)
+                                elif hasattr(data_or_content, '__iter__'):
+                                    # 可迭代对象，转换为文本
+                                    with open(export_path, 'w', encoding='utf-8') as f:
+                                        for item in data_or_content:
+                                            f.write(str(item) + "\n")
+                                else:
+                                    # 其他情况，转换为字符串
+                                    with open(export_path, 'w', encoding='utf-8') as f:
+                                        f.write(str(data_or_content))
+                                
+                                print(f"✅ 文件已保存到用户导出目录: {export_path.name}")
+                                return str(export_path)
+                            
+                            exec_globals['save_to_exports'] = save_to_exports
+                            
+                            # 捕获输出
+                            import io
                             import sys
+                            
+                            captured_output = io.StringIO()
                             old_stdout = sys.stdout
-                            sys.stdout = exec_output
+                            sys.stdout = captured_output
                             
                             try:
                                 exec(doc_code_input, exec_globals)
-                                result = exec_output.getvalue()
+                                output = captured_output.getvalue()
                                 
-                                if result:
+                                # 显示执行结果
+                                if output.strip():
+                                    st.success("✅ 代码执行成功！")
                                     st.subheader("📋 执行结果")
-                                    st.text(result)
+                                    st.text(output)
                                 else:
                                     st.success("✅ 代码执行完成（无输出）")
                                     
@@ -4082,138 +4390,405 @@ print(f"报告文件: {md_file}")
                                 sys.stdout = old_stdout
                                 
                         except Exception as e:
-                            st.error(f"❌ 代码执行错误: {str(e)}")
-                            st.error("请检查代码语法和逻辑")
-                else:
-                    st.warning("⚠️ 请输入要执行的代码")
+                            st.error(f"❌ 代码执行失败: {str(e)}")
+                            import traceback as tb_module
+                            st.code(tb_module.format_exc(), language='python')
+                
+                with col_clear_code:
+                    if st.button("🗑️ 清空输出", use_container_width=True):
+                        st.rerun()
+            else:
+                st.warning("⚠️ 请先加载文档数据")
         
-        # Tab 4: 搜索工具
+        # Tab 4: 搜索工具 - 与Excel数据工具保持一致
         with doc_tab4:
-            st.header("🔍 文档搜索工具")
+            st.header("🛠️ 文档工具")
             
-            if st.session_state.document_processor:
-                # 关键词搜索
+            # 创建子标签
+            doc_tool_tab1, doc_tool_tab2, doc_tool_tab3 = st.tabs(["🔍 搜索分析", "📊 文档统计", "📁 我的导出文件"])
+            
+            # 子Tab 1: 搜索分析
+            with doc_tool_tab1:
                 st.subheader("🎯 关键词搜索")
                 
-                col_search1, col_search2 = st.columns([3, 1])
-                
-                with col_search1:
-                    search_keyword = st.text_input(
-                        "输入搜索关键词",
-                        placeholder="例如: 合同编号、重要条款、日期等...",
-                        key="doc_search_keyword"
-                    )
-                
-                with col_search2:
-                    context_lines = st.number_input(
-                        "上下文行数",
-                        min_value=1,
-                        max_value=10,
-                        value=3,
-                        key="doc_context_lines"
-                    )
-                
-                if st.button("🔍 搜索", type="primary", use_container_width=True):
-                    if search_keyword.strip():
-                        with st.spinner(f"🔍 正在搜索关键词: {search_keyword}"):
-                            search_results = st.session_state.document_processor.search_content(
-                                search_keyword, 
-                                context_lines
-                            )
-                            
-                            if search_results:
-                                st.success(f"✅ 找到 {len(search_results)} 个匹配结果")
-                                
-                                for i, result in enumerate(search_results, 1):
-                                    with st.expander(f"📍 结果 {i} - 第{result['line_number']}行", expanded=i <= 3):
-                                        st.markdown(f"**匹配内容**: {result['matched_line']}")
-                                        st.markdown("**上下文**:")
-                                        st.code(result['context'], language='text')
+                if st.session_state.document_processor:
+                    # 单个关键词搜索
+                    col_search1, col_search2 = st.columns([3, 1])
+                    
+                    with col_search1:
+                        search_keyword = st.text_input(
+                            "输入搜索关键词",
+                            placeholder="例如: 合同编号、重要条款、日期等...",
+                            key="doc_search_keyword"
+                        )
+                    
+                    with col_search2:
+                        context_lines = st.number_input(
+                            "上下文行数",
+                            min_value=1,
+                            max_value=10,
+                            value=3,
+                            key="doc_context_lines"
+                        )
+                    
+                    col_search_btn, col_export_search = st.columns([2, 1])
+                    
+                    with col_search_btn:
+                        if st.button("🔍 搜索", type="primary", use_container_width=True):
+                            if search_keyword.strip():
+                                with st.spinner(f"🔍 正在搜索关键词: {search_keyword}"):
+                                    search_results = st.session_state.document_processor.search_content(
+                                        search_keyword, 
+                                        context_lines
+                                    )
+                                    
+                                    st.session_state.last_search_results = search_results
+                                    st.session_state.last_search_keyword = search_keyword
+                                    
+                                    if search_results:
+                                        st.success(f"✅ 找到 {len(search_results)} 个匹配结果")
+                                        
+                                        for i, result in enumerate(search_results, 1):
+                                            with st.expander(f"📍 结果 {i} - 第{result['line_number']}行", expanded=i <= 3):
+                                                st.markdown(f"**匹配内容**: {result['matched_line']}")
+                                                st.markdown("**上下文**:")
+                                                st.code(result['context'], language='text')
+                                    else:
+                                        st.warning(f"❌ 未找到关键词: {search_keyword}")
                             else:
-                                st.warning(f"❌ 未找到关键词: {search_keyword}")
-                    else:
-                        st.warning("⚠️ 请输入搜索关键词")
-                
-                # 批量搜索
-                st.subheader("📋 批量关键词搜索")
-                
-                batch_keywords = st.text_area(
-                    "输入多个关键词（每行一个）",
-                    placeholder="合同编号\n甲方\n乙方\n金额\n日期",
-                    height=100,
-                    key="doc_batch_keywords"
-                )
-                
-                if st.button("🔍 批量搜索", use_container_width=True):
-                    if batch_keywords.strip():
-                        keywords = [kw.strip() for kw in batch_keywords.split('\n') if kw.strip()]
-                        
-                        if keywords:
-                            with st.spinner(f"🔍 正在搜索 {len(keywords)} 个关键词..."):
+                                st.warning("⚠️ 请输入搜索关键词")
+                    
+                    with col_export_search:
+                        if st.button("💾 导出搜索结果", use_container_width=True):
+                            if 'last_search_results' in st.session_state and st.session_state.last_search_results:
                                 try:
-                                    from document_utils import DocumentSearchEngine
-                                    search_engine = DocumentSearchEngine(st.session_state.document_processor)
+                                    from datetime import datetime as dt
+                                    import json as json_module
+                                    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
                                     
-                                    # 生成搜索报告
-                                    search_report = search_engine.generate_search_report(keywords)
+                                    # 创建搜索报告
+                                    search_report = {
+                                        "搜索时间": timestamp,
+                                        "关键词": st.session_state.get('last_search_keyword', ''),
+                                        "文档名称": st.session_state.get('current_doc_name', ''),
+                                        "结果数量": len(st.session_state.last_search_results),
+                                        "搜索结果": st.session_state.last_search_results
+                                    }
                                     
-                                    st.subheader("📊 批量搜索报告")
-                                    st.markdown(search_report)
+                                    # 保存JSON文件
+                                    export_path = Path(session_manager.get_user_workspace(session_id)) / "exports" / f"{timestamp}_搜索结果.json"
+                                    export_path.parent.mkdir(parents=True, exist_ok=True)
+                                    
+                                    with open(export_path, 'w', encoding='utf-8') as f:
+                                        json_module.dump(search_report, f, ensure_ascii=False, indent=2)
+                                    
+                                    st.success(f"✅ 搜索结果已导出: {export_path.name}")
                                     
                                 except Exception as e:
-                                    st.error(f"❌ 批量搜索失败: {str(e)}")
-                        else:
-                            st.warning("⚠️ 请输入有效的关键词")
-                    else:
-                        st.warning("⚠️ 请输入关键词")
+                                    st.error(f"❌ 导出失败: {str(e)}")
+                            else:
+                                st.warning("⚠️ 请先执行搜索")
+                    
+                    # 批量搜索
+                    st.subheader("📋 批量关键词搜索")
+                    
+                    batch_keywords = st.text_area(
+                        "输入多个关键词（每行一个）",
+                        placeholder="合同编号\n甲方\n乙方\n金额\n日期",
+                        height=100,
+                        key="doc_batch_keywords"
+                    )
+                    
+                    col_batch_search, col_export_batch = st.columns([2, 1])
+                    
+                    with col_batch_search:
+                        if st.button("🔍 批量搜索", use_container_width=True):
+                            if batch_keywords.strip():
+                                keywords = [kw.strip() for kw in batch_keywords.split('\n') if kw.strip()]
+                                
+                                if keywords:
+                                    with st.spinner(f"🔍 正在搜索 {len(keywords)} 个关键词..."):
+                                        try:
+                                            batch_results = {}
+                                            
+                                            for keyword in keywords:
+                                                search_results = st.session_state.document_processor.search_content(
+                                                    keyword, 
+                                                    context_lines
+                                                )
+                                                batch_results[keyword] = search_results
+                                            
+                                            # 保存批量搜索结果
+                                            st.session_state.last_batch_results = batch_results
+                                            st.session_state.last_batch_keywords = keywords
+                                            
+                                            # 显示结果
+                                            st.subheader("📊 批量搜索结果")
+                                            for keyword, results in batch_results.items():
+                                                with st.expander(f"🔍 关键词: {keyword} (找到 {len(results)} 个结果)", expanded=len(results) > 0):
+                                                    if results:
+                                                        for i, result in enumerate(results[:3], 1):  # 只显示前3个
+                                                            st.markdown(f"**结果 {i}**: {result['matched_line']}")
+                                                            if len(results) > 3:
+                                                                st.markdown(f"... 还有 {len(results) - 3} 个结果")
+                                                    else:
+                                                        st.warning("未找到匹配结果")
+                                            
+                                        except Exception as e:
+                                            st.error(f"❌ 批量搜索失败: {str(e)}")
+                                else:
+                                    st.warning("⚠️ 请输入有效的关键词")
+                            else:
+                                st.warning("⚠️ 请输入关键词")
+                    
+                    with col_export_batch:
+                        if st.button("💾 导出批量结果", use_container_width=True):
+                            if 'last_batch_results' in st.session_state and st.session_state.last_batch_results:
+                                try:
+                                    from datetime import datetime as dt
+                                    import json as json_module
+                                    timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+                                    
+                                    # 创建批量搜索报告
+                                    batch_report = {
+                                        "搜索时间": timestamp,
+                                        "关键词列表": st.session_state.get('last_batch_keywords', []),
+                                        "文档名称": st.session_state.get('current_doc_name', ''),
+                                        "批量搜索结果": st.session_state.last_batch_results
+                                    }
+                                    
+                                    # 保存JSON文件
+                                    export_path = Path(session_manager.get_user_workspace(session_id)) / "exports" / f"{timestamp}_批量搜索结果.json"
+                                    export_path.parent.mkdir(parents=True, exist_ok=True)
+                                    
+                                    with open(export_path, 'w', encoding='utf-8') as f:
+                                        json_module.dump(batch_report, f, ensure_ascii=False, indent=2)
+                                    
+                                    st.success(f"✅ 批量搜索结果已导出: {export_path.name}")
+                                    
+                                except Exception as e:
+                                    st.error(f"❌ 导出失败: {str(e)}")
+                            else:
+                                st.warning("⚠️ 请先执行批量搜索")
+                else:
+                    st.error("❌ 文档处理器不可用，请重新加载页面")
+            
+            # 子Tab 2: 文档统计
+            with doc_tool_tab2:
+                st.subheader("📊 文档统计分析")
                 
-                # 导出搜索结果
-                st.subheader("📤 导出功能")
-                if st.button("📋 导出完整分析报告", use_container_width=True):
-                    try:
-                        # 生成导出文件
-                        user_exports_dir = session_manager.get_user_workspace(session_id) / "exports"
-                        user_exports_dir.mkdir(exist_ok=True)
+                if st.session_state.document_data:
+                    file_info = st.session_state.document_data.get('file_info', {})
+                    structure = st.session_state.document_data.get('structure_analysis', {})
+                    preview_data = st.session_state.document_data.get('preview_data', {})
+                    
+                    # 基本统计
+                    col_stat1, col_stat2, col_stat3, col_stat4 = st.columns(4)
+                    
+                    with col_stat1:
+                        st.metric("文件大小", f"{file_info.get('size_mb', 0)} MB")
+                    
+                    with col_stat2:
+                        if file_info.get('type') == 'docx':
+                            st.metric("段落数", structure.get('total_paragraphs', 0))
+                        else:
+                            st.metric("页数", structure.get('total_pages', 0))
+                    
+                    with col_stat3:
+                        st.metric("表格数", structure.get('tables_count', 0))
+                    
+                    with col_stat4:
+                        st.metric("图片数", structure.get('images_count', 0))
+                    
+                    # 标题层级统计
+                    headings = structure.get('headings', {})
+                    if headings:
+                        st.subheader("📑 标题层级分布")
+                        heading_data = []
+                        for level, heading_list in headings.items():
+                            heading_data.append({
+                                "标题级别": level,
+                                "数量": len(heading_list),
+                                "示例": heading_list[0]['text'][:50] if heading_list else ""
+                            })
                         
-                        json_file, md_file = st.session_state.document_processor.export_analysis_result(str(user_exports_dir))
+                        st.table(heading_data)
+                    
+                    # 字体使用统计
+                    fonts = structure.get('fonts_used', [])
+                    if fonts:
+                        st.subheader("🎨 字体使用情况")
+                        col_font1, col_font2 = st.columns(2)
                         
-                        # 提供下载
-                        col_download1, col_download2 = st.columns(2)
+                        with col_font1:
+                            st.markdown(f"**字体种类数量**: {len(fonts)}")
+                            st.markdown("**主要字体**:")
+                            for font in fonts[:5]:
+                                st.markdown(f"- {font}")
                         
-                        with col_download1:
-                            try:
-                                with open(json_file, 'rb') as f:
-                                    json_data = f.read()
-                                st.download_button(
-                                    label="⬇️ 下载JSON数据",
-                                    data=json_data,
-                                    file_name=os.path.basename(json_file),
-                                    mime="application/json",
-                                    use_container_width=True
-                                )
-                            except Exception as e:
-                                st.error(f"JSON下载失败: {e}")
+                        with col_font2:
+                            if len(fonts) > 5:
+                                st.markdown("**其他字体**:")
+                                for font in fonts[5:10]:
+                                    st.markdown(f"- {font}")
+                    
+                    # 内容统计
+                    if preview_data.get('status') == 'success':
+                        st.subheader("📝 内容统计")
+                        col_content1, col_content2 = st.columns(2)
                         
-                        with col_download2:
-                            try:
-                                with open(md_file, 'rb') as f:
-                                    md_data = f.read()
-                                st.download_button(
-                                    label="⬇️ 下载分析报告",
-                                    data=md_data,
-                                    file_name=os.path.basename(md_file),
-                                    mime="text/markdown",
-                                    use_container_width=True
-                                )
-                            except Exception as e:
-                                st.error(f"报告下载失败: {e}")
+                        with col_content1:
+                            st.metric("字符数", preview_data.get('char_count', 0))
+                            st.metric("单词数", preview_data.get('word_count', 0))
                         
-                        st.success("✅ 文件导出成功！请点击下载按钮获取文件")
+                        with col_content2:
+                            st.metric("行数", preview_data.get('line_count', 0))
+                            st.metric("段落数", preview_data.get('paragraph_count', 0))
+                    
+                    # 导出统计报告
+                    if st.button("📊 导出统计报告", type="primary", use_container_width=True):
+                        try:
+                            from datetime import datetime as dt
+                            import json as json_module
+                            timestamp = dt.now().strftime("%Y%m%d_%H%M%S")
+                            
+                            # 创建统计报告
+                            stats_report = {
+                                "生成时间": timestamp,
+                                "文档信息": file_info,
+                                "结构统计": structure,
+                                "内容统计": preview_data,
+                                "标题分布": {level: len(headings) for level, headings in headings.items()} if headings else {},
+                                "字体统计": {"总数": len(fonts), "列表": fonts} if fonts else {}
+                            }
+                            
+                            # 保存报告
+                            export_path = Path(session_manager.get_user_workspace(session_id)) / "exports" / f"{timestamp}_文档统计报告.json"
+                            export_path.parent.mkdir(parents=True, exist_ok=True)
+                            
+                            with open(export_path, 'w', encoding='utf-8') as f:
+                                json_module.dump(stats_report, f, ensure_ascii=False, indent=2)
+                            
+                            st.success(f"✅ 统计报告已导出: {export_path.name}")
+                            
+                        except Exception as e:
+                            st.error(f"❌ 导出失败: {str(e)}")
+                else:
+                    st.warning("⚠️ 请先加载文档数据")
+            
+            # 子Tab 3: 我的导出文件 - 与Excel保持一致
+            with doc_tool_tab3:
+                st.subheader("📁 我的导出文件")
+                
+                try:
+                    user_exports_dir = Path(session_manager.get_user_workspace(session_id)) / "exports"
+                    
+                    if user_exports_dir.exists():
+                        # 获取所有导出文件
+                        export_files = list(user_exports_dir.glob("*"))
+                        export_files.sort(key=lambda x: x.stat().st_mtime, reverse=True)
                         
-                    except Exception as e:
-                        st.error(f"❌ 导出失败: {str(e)}")
-            else:
-                st.error("❌ 文档处理器不可用，请重新加载页面")
+                        if export_files:
+                            st.success(f"✅ 找到 {len(export_files)} 个导出文件")
+                            
+                            # 分类显示文件
+                            json_files = [f for f in export_files if f.suffix == '.json']
+                            md_files = [f for f in export_files if f.suffix in ['.md', '.txt']]
+                            other_files = [f for f in export_files if f not in json_files + md_files]
+                            
+                            # JSON数据文件
+                            if json_files:
+                                st.markdown("**📄 JSON数据文件:**")
+                                for json_file in json_files:
+                                    file_size = json_file.stat().st_size / 1024  # KB
+                                    
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        st.write(f"📄 {json_file.name} ({file_size:.1f} KB)")
+                                    with col2:
+                                        try:
+                                            with open(json_file, 'rb') as f:
+                                                file_data = f.read()
+                                            st.download_button(
+                                                label="⬇️ 下载",
+                                                data=file_data,
+                                                file_name=json_file.name,
+                                                mime="application/json",
+                                                key=f"download_json_{json_file.stem}",
+                                                use_container_width=True
+                                            )
+                                        except Exception as e:
+                                            st.error(f"下载失败: {e}")
+                            
+                            # Markdown报告文件
+                            if md_files:
+                                st.markdown("**📝 Markdown报告文件:**")
+                                for md_file in md_files:
+                                    file_size = md_file.stat().st_size / 1024  # KB
+                                    
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        st.write(f"📝 {md_file.name} ({file_size:.1f} KB)")
+                                    with col2:
+                                        try:
+                                            with open(md_file, 'rb') as f:
+                                                file_data = f.read()
+                                            st.download_button(
+                                                label="⬇️ 下载",
+                                                data=file_data,
+                                                file_name=md_file.name,
+                                                mime="text/markdown",
+                                                key=f"download_md_{md_file.stem}",
+                                                use_container_width=True
+                                            )
+                                        except Exception as e:
+                                            st.error(f"下载失败: {e}")
+                            
+                            # 其他文件
+                            if other_files:
+                                st.markdown("**📄 其他文件:**")
+                                for other_file in other_files:
+                                    file_size = other_file.stat().st_size / 1024  # KB
+                                    
+                                    col1, col2 = st.columns([3, 1])
+                                    with col1:
+                                        st.write(f"📄 {other_file.name} ({file_size:.1f} KB)")
+                                    with col2:
+                                        try:
+                                            with open(other_file, 'rb') as f:
+                                                file_data = f.read()
+                                            st.download_button(
+                                                label="⬇️ 下载",
+                                                data=file_data,
+                                                file_name=other_file.name,
+                                                mime="application/octet-stream",
+                                                key=f"download_other_{other_file.stem}",
+                                                use_container_width=True
+                                            )
+                                        except Exception as e:
+                                            st.error(f"下载失败: {e}")
+                            
+                            # 存储使用统计
+                            total_size = sum(f.stat().st_size for f in export_files) / (1024 * 1024)  # MB
+                            st.markdown("---")
+                            st.markdown(f"**💾 存储使用**: {total_size:.2f} MB (共 {len(export_files)} 个文件)")
+                            
+                            # 清理功能
+                            if st.button("🗑️ 清理所有导出文件", type="secondary"):
+                                try:
+                                    for file in export_files:
+                                        file.unlink()
+                                    st.success("✅ 所有导出文件已清理")
+                                    st.rerun()
+                                except Exception as e:
+                                    st.error(f"❌ 清理失败: {str(e)}")
+                        else:
+                            st.info("📭 暂无导出文件")
+                    else:
+                        st.info("📁 导出目录不存在，执行代码后将自动创建")
+                        
+                except Exception as e:
+                    st.error(f"❌ 获取导出文件失败: {str(e)}")
     
     else:
         # 欢迎界面

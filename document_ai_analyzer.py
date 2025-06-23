@@ -269,7 +269,7 @@ class EnhancedDocumentAIAnalyzer:
             return f"# 代码生成失败: {str(e)}\n\n# 请检查API配置或网络连接"
     
     def _build_code_generation_prompt(self, task_description: str, document_analysis: Dict[str, Any], filename: str) -> str:
-        """构建代码生成的提示词"""
+        """构建代码生成的提示词，包含完整的可用变量信息"""
         file_info = document_analysis.get('file_info', {})
         structure = document_analysis.get('structure_analysis', {})
         
@@ -289,8 +289,10 @@ class EnhancedDocumentAIAnalyzer:
         if file_info.get('type') == 'docx':
             prompt_parts.append(f"- 段落数: {structure.get('total_paragraphs', 0)}")
             prompt_parts.append(f"- 表格数: {structure.get('tables_count', 0)}")
+            prompt_parts.append(f"- 图片数: {structure.get('images_count', 0)}")
         elif file_info.get('type') == 'pdf':
             prompt_parts.append(f"- 页数: {structure.get('total_pages', 0)}")
+            prompt_parts.append(f"- 图片数: {structure.get('images_count', 0)}")
         
         # 标题信息
         headings = structure.get('headings', {})
@@ -300,16 +302,77 @@ class EnhancedDocumentAIAnalyzer:
             for level in sorted(headings.keys()):
                 heading_list = headings[level]
                 prompt_parts.append(f"- {level}级标题: {len(heading_list)}个")
+                if heading_list:
+                    # 提供标题示例
+                    examples = [h.get('text', str(h))[:50] for h in heading_list[:2]]
+                    prompt_parts.append(f"  示例: {', '.join(examples)}")
         
-        # 可用的工具类
+        # 可用变量信息 - 与Excel保持一致的格式
         prompt_parts.append(f"")
-        prompt_parts.append(f"## 可用工具")
-        prompt_parts.append(f"- DocumentAnalyzer: 文档分析和搜索")
-        prompt_parts.append(f"- AdvancedDocumentProcessor: 高级文档处理")
-        prompt_parts.append(f"- DocumentSearchEngine: 搜索引擎")
+        prompt_parts.append(f"## 可用变量")
+        prompt_parts.append(f"- document_path: 原始文档文件路径")
+        prompt_parts.append(f"- document_name: 文件名 ({filename})")
+        prompt_parts.append(f"- document_type: 文档类型 ({file_info.get('type', 'Unknown').upper()})")
+        prompt_parts.append(f"- document_data: 完整文档分析数据字典")
+        prompt_parts.append(f"- file_info: 文件基本信息字典")
+        prompt_parts.append(f"- structure_analysis: 结构分析结果字典")
+        prompt_parts.append(f"- document_analyzer: DocumentAnalyzer实例")
+        prompt_parts.append(f"- document_processor: AdvancedDocumentProcessor实例")
+        prompt_parts.append(f"- search_engine: DocumentSearchEngine实例")
+        
+        # 用户工作空间变量
+        prompt_parts.append(f"")
+        prompt_parts.append(f"## 用户工作空间变量")
+        prompt_parts.append(f"- user_session_id: 用户会话ID")
+        prompt_parts.append(f"- user_workspace: 用户专属工作空间路径")
+        prompt_parts.append(f"- user_exports_dir: 用户导出文件目录")
+        prompt_parts.append(f"- save_to_exports(filename, data): 保存文件到导出目录的函数")
+        
+        # 可用的工具类和函数
+        prompt_parts.append(f"")
+        prompt_parts.append(f"## 可用工具和方法")
+        prompt_parts.append(f"- document_analyzer.analyze_document(path): 重新分析文档")
+        prompt_parts.append(f"- document_processor.search_content(keyword, context_lines): 搜索关键词")
+        prompt_parts.append(f"- document_processor.get_document_preview(): 获取文档预览")
+        prompt_parts.append(f"- document_processor.get_structure_summary(): 获取结构摘要")
+        prompt_parts.append(f"- search_engine.search_content(keyword, context_lines): 高级搜索")
         
         prompt_parts.append(f"")
-        prompt_parts.append(f"请生成完整的Python代码来完成上述任务。")
+        prompt_parts.append(f"请生成完整的Python代码来完成上述任务。代码要求：")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"1. **文档文件级别操作**:")
+        prompt_parts.append(f"   - 可以使用document_path访问原始文档文件")
+        prompt_parts.append(f"   - 可以使用document_analyzer重新分析文档")
+        prompt_parts.append(f"   - 支持复杂的文档操作，如结构提取、内容分析等")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"2. **搜索和内容提取**:")
+        prompt_parts.append(f"   - 使用search_engine或document_processor进行关键词搜索")
+        prompt_parts.append(f"   - 支持批量搜索多个关键词")
+        prompt_parts.append(f"   - 提取上下文信息和精确位置")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"3. **综合数据处理**:")
+        prompt_parts.append(f"   - 分析文档结构和标题层级")
+        prompt_parts.append(f"   - 提取和处理文档内容")
+        prompt_parts.append(f"   - 包含必要的错误处理和数据验证")
+        prompt_parts.append(f"   - 添加详细的中文注释说明业务逻辑")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"4. **结果输出**:")
+        prompt_parts.append(f"   - 提供清晰的处理结果和统计信息")
+        prompt_parts.append(f"   - 使用save_to_exports()函数保存结果文件")
+        prompt_parts.append(f"   - 包含执行进度提示和关键节点输出")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"5. **代码结构**:")
+        prompt_parts.append(f"   - 确保代码可以直接执行")
+        prompt_parts.append(f"   - 包含必要的导入语句")
+        prompt_parts.append(f"   - 结构清晰，逻辑分明")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"特别注意：")
+        prompt_parts.append(f"- 充分利用document_data、file_info、structure_analysis等变量")
+        prompt_parts.append(f"- 所有导出文件都要使用save_to_exports()函数保存")
+        prompt_parts.append(f"- 代码应该能处理DOCX和PDF两种格式的差异")
+        prompt_parts.append(f"- 提供详细的中文输出和进度提示")
+        prompt_parts.append(f"")
+        prompt_parts.append(f"请只返回纯Python代码，不要包含任何markdown格式标记。")
         
         return "\n".join(prompt_parts)
     
