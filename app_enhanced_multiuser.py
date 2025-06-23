@@ -3591,6 +3591,82 @@ print("="*50)
             except Exception as e:
                 st.error(f"❌ 预览生成失败: {str(e)}")
             
+            # 图片预览和分析
+            st.subheader("🖼️ 图片预览与水印分析")
+            try:
+                preview_data = st.session_state.document_data.get('preview_data', {})
+                structure_data = st.session_state.document_data.get('structure_analysis', {})
+                
+                # 检查是否有图片信息
+                has_images = preview_data.get('has_images', False)
+                images_preview = preview_data.get('images_preview', [])
+                watermark_analysis = structure_data.get('watermark_analysis', {})
+                
+                if has_images and images_preview:
+                    st.success(f"✅ 检测到 {len(images_preview)} 张图片")
+                    
+                    # 水印检测结果
+                    if watermark_analysis:
+                        col_w1, col_w2 = st.columns(2)
+                        with col_w1:
+                            if watermark_analysis.get('has_watermark', False):
+                                st.warning(f"⚠️ 检测到可能的水印 (置信度: {watermark_analysis.get('confidence', 0):.2f})")
+                                st.info(f"水印类型: {watermark_analysis.get('watermark_type', '未知')}")
+                            else:
+                                st.success("✅ 未检测到明显水印")
+                        with col_w2:
+                            st.metric("图片总数", watermark_analysis.get('total_images', 0))
+                            if watermark_analysis.get('watermark_images', 0) > 0:
+                                st.metric("含水印图片", watermark_analysis.get('watermark_images', 0))
+                    
+                    # 图片预览网格
+                    with st.expander(f"🖼️ 图片预览 (前{len(images_preview)}张)", expanded=True):
+                        # 根据图片数量决定列数
+                        num_images = len(images_preview)
+                        if num_images == 1:
+                            cols = st.columns(1)
+                        elif num_images == 2:
+                            cols = st.columns(2)
+                        elif num_images <= 4:
+                            cols = st.columns(2)
+                        else:
+                            cols = st.columns(3)
+                        
+                        for i, img_info in enumerate(images_preview):
+                            with cols[i % len(cols)]:
+                                try:
+                                    # 显示图片
+                                    import base64
+                                    img_data = base64.b64decode(img_info['base64'])
+                                    st.image(img_data, 
+                                           caption=f"图片 {i+1}: {img_info.get('width', 0)}x{img_info.get('height', 0)}px",
+                                           use_column_width=True)
+                                    
+                                    # 图片详细信息
+                                    with st.expander(f"图片{i+1}详情", expanded=False):
+                                        st.write(f"**尺寸**: {img_info.get('width', 0)} x {img_info.get('height', 0)} 像素")
+                                        st.write(f"**大小**: {img_info.get('size_kb', 0):.1f} KB")
+                                        st.write(f"**格式**: {img_info.get('format', 'Unknown')}")
+                                        
+                                        if 'page' in img_info:
+                                            st.write(f"**位置**: 第{img_info['page']}页")
+                                        
+                                        # 水印检测结果
+                                        if img_info.get('watermark_detected', False):
+                                            st.warning(f"⚠️ 检测到可能的水印")
+                                            st.write(f"**水印类型**: {img_info.get('watermark_type', '未知')}")
+                                            st.write(f"**置信度**: {img_info.get('watermark_confidence', 0):.2f}")
+                                        else:
+                                            st.success("✅ 未检测到水印")
+                                
+                                except Exception as e:
+                                    st.error(f"图片{i+1}显示失败: {str(e)}")
+                else:
+                    st.info("📷 该文档中未检测到图片，或图片提取失败")
+                    
+            except Exception as e:
+                st.error(f"❌ 图片分析失败: {str(e)}")
+            
             # 结构化分析摘要
             st.subheader("🏗️ 文档结构摘要")
             try:
@@ -3666,25 +3742,43 @@ print("="*50)
                                         analysis_text += f"- **页数**: {structure_analysis.get('total_pages', 0)}\n"
                                         analysis_text += f"- **图片数**: {structure_analysis.get('images_count', 0)}\n"
                                     
-                                    # 标题层级
+                                    # 标题层级 - 100个以内全部显示
                                     headings = structure_analysis.get('headings', {})
                                     if headings:
                                         analysis_text += "\n## 🏷️ 标题层级结构\n"
                                         for level in sorted(headings.keys()):
                                             heading_list = headings[level]
                                             analysis_text += f"### {level}级标题 (共{len(heading_list)}个)\n"
-                                            for heading in heading_list[:3]:
-                                                text = heading.get('text', str(heading))[:100]
-                                                analysis_text += f"- {text}\n"
-                                            if len(heading_list) > 3:
-                                                analysis_text += f"- ... 还有{len(heading_list) - 3}个\n"
+                                            
+                                            # 100个以内全部显示，超过则截断
+                                            if len(heading_list) <= 100:
+                                                for heading in heading_list:
+                                                    text = heading.get('text', str(heading))[:120]  # 增加显示长度
+                                                    analysis_text += f"- {text}\n"
+                                            else:
+                                                # 显示前100个
+                                                for heading in heading_list[:100]:
+                                                    text = heading.get('text', str(heading))[:120]
+                                                    analysis_text += f"- {text}\n"
+                                                analysis_text += f"- ... 还有{len(heading_list) - 100}个{level}级标题（超过100个限制）\n"
                                     
-                                    # 字体使用
+                                    # 字体使用 - 100个以内全部显示
                                     fonts = structure_analysis.get('fonts_used', [])
                                     if fonts:
                                         analysis_text += f"\n## 🔤 字体使用情况\n"
                                         analysis_text += f"- **字体种类数**: {len(fonts)}\n"
-                                        analysis_text += f"- **主要字体**: {', '.join(fonts[:5])}\n"
+                                        
+                                        if len(fonts) <= 100:
+                                            # 100个以内全部显示
+                                            analysis_text += f"- **所有字体**:\n"
+                                            for font in fonts:
+                                                analysis_text += f"  - {font}\n"
+                                        else:
+                                            # 超过100个，显示前100个
+                                            analysis_text += f"- **字体列表** (前100个):\n"
+                                            for font in fonts[:100]:
+                                                analysis_text += f"  - {font}\n"
+                                            analysis_text += f"  - ... 还有{len(fonts) - 100}种字体（超过100个限制）\n"
                                     
                                     st.session_state.quick_doc_analysis = analysis_text
                                     st.success("✅ 文档结构化分析完成！")

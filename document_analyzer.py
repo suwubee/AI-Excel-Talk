@@ -193,38 +193,74 @@ class DocumentAnalyzer:
             'images': [],
             'page_count': 0,
             'word_count': 0,
-            'error': None
+            'error': None,
+            'has_images': False,
+            'images_preview': []
         }
         
         try:
             if not self.markdown_converter:
                 preview_data['status'] = 'error'
-                preview_data['error'] = 'markitdown未安装，无法生成预览'
+                preview_data['error'] = 'MarkItDown 未可用'
                 return preview_data
             
-            # 使用markitdown转换文档
+            # 使用markitdown转换
             result = self.markdown_converter.convert(file_path)
-            markdown_content = result.text_content
+            content = result.text_content if hasattr(result, 'text_content') else str(result)
             
-            # 限制内容长度（模拟10页限制）
-            max_chars = 50000  # 大约10页内容
-            if len(markdown_content) > max_chars:
-                markdown_content = markdown_content[:max_chars] + "\n\n... (内容已截断，仅显示前10页内容)"
+            # 限制内容长度（模拟10页）
+            max_chars = 20000  # 约10页内容
+            if len(content) > max_chars:
+                content = content[:max_chars] + "\n\n... [内容被截断，超过10页预览限制]"
             
-            preview_data['content'] = markdown_content
-            preview_data['word_count'] = len(markdown_content.split())
+            preview_data['content'] = content
+            preview_data['word_count'] = len(content.split())
             
-            # 提取图片信息（如果有）
-            preview_data['images'] = self._extract_images_info(file_path)
+            # 估算页数（基于字符数）
+            chars_per_page = 2000
+            preview_data['page_count'] = max(1, len(content) // chars_per_page)
             
-            # 估算页数
-            preview_data['page_count'] = max(1, len(markdown_content) // 5000)
+            # 提取图片信息用于预览
+            images_info = self._extract_images_info(file_path)
+            preview_data['images'] = [img['base64'] for img in images_info[:5]]  # 前5张图片的base64
+            preview_data['images_preview'] = images_info[:5]  # 图片详细信息
+            preview_data['has_images'] = len(images_info) > 0
             
         except Exception as e:
             preview_data['status'] = 'error'
-            preview_data['error'] = f"预览生成失败: {str(e)}"
+            preview_data['error'] = f'MarkItDown处理失败: {str(e)}'
+            
+            # 尝试备用方案
+            try:
+                fallback_content = self._fallback_content_extraction(file_path)
+                if fallback_content:
+                    preview_data['content'] = fallback_content[:20000]
+                    preview_data['word_count'] = len(fallback_content.split())
+                    preview_data['status'] = 'fallback'
+                    preview_data['error'] = f'使用备用方案: {str(e)}'
+            except:
+                preview_data['content'] = '内容提取失败，请检查文件格式和依赖安装'
         
         return preview_data
+    
+    def _fallback_content_extraction(self, file_path: str) -> str:
+        """备用内容提取方案"""
+        content = ""
+        
+        try:
+            if self.document_type == 'docx' and Document:
+                doc = Document(file_path)
+                content = "\n".join([para.text for para in doc.paragraphs])
+            elif self.document_type == 'pdf' and fitz:
+                doc = fitz.open(file_path)
+                for page_num in range(min(10, len(doc))):  # 限制10页
+                    page = doc[page_num]
+                    content += page.get_text() + "\n"
+                doc.close()
+        except:
+            pass
+        
+        return content
     
     def _analyze_document_structure(self, file_path: str) -> Dict[str, Any]:
         """
@@ -253,7 +289,9 @@ class DocumentAnalyzer:
                 'paragraph_analysis': [],
                 'tables_count': len(doc.tables),
                 'images_count': 0,
-                'page_breaks': 0
+                'page_breaks': 0,
+                'images_info': [],
+                'watermark_analysis': {}
             }
             
             # 分析段落和标题层级
@@ -293,10 +331,13 @@ class DocumentAnalyzer:
             structure['headings'] = heading_levels
             structure['fonts_used'] = list(structure['fonts_used'])
             
-            # 分析图片（通过relationships）
-            for rel in doc.part.rels.values():
-                if "image" in rel.target_ref:
-                    structure['images_count'] += 1
+            # 提取和分析图片
+            images_info = self._extract_images_info(file_path)
+            structure['images_info'] = images_info
+            structure['images_count'] = len(images_info)
+            
+            # 水印分析
+            structure['watermark_analysis'] = self._analyze_watermarks(images_info)
             
             return structure
             
@@ -318,7 +359,9 @@ class DocumentAnalyzer:
                 'headings': {},
                 'page_analysis': [],
                 'images_count': 0,
-                'tables_detected': 0
+                'tables_detected': 0,
+                'images_info': [],
+                'watermark_analysis': {}
             }
             
             heading_levels = {}
@@ -359,12 +402,19 @@ class DocumentAnalyzer:
                 
                 page_info['fonts_on_page'] = list(page_info['fonts_on_page'])
                 structure['page_analysis'].append(page_info)
-                structure['images_count'] += page_info['images_count']
             
             structure['fonts_used'] = list(structure['fonts_used'])
             structure['headings'] = heading_levels
             
-            doc.close()
+            # 提取和分析图片
+            doc.close()  # 先关闭再重新打开进行图片分析
+            images_info = self._extract_images_info(file_path)
+            structure['images_info'] = images_info
+            structure['images_count'] = len(images_info)
+            
+            # 水印分析
+            structure['watermark_analysis'] = self._analyze_watermarks(images_info)
+            
             return structure
             
         except Exception as e:
@@ -382,13 +432,13 @@ class DocumentAnalyzer:
             return 4
     
     def _extract_images_info(self, file_path: str) -> List[Dict[str, Any]]:
-        """提取文档中的图片信息"""
+        """提取文档中的图片信息，包括水印检测"""
         images_info = []
         
         try:
             if self.document_type == 'pdf' and fitz:
                 doc = fitz.open(file_path)
-                for page_num in range(min(5, len(doc))):  # 只处理前5页的图片
+                for page_num in range(min(10, len(doc))):  # 处理前10页的图片
                     page = doc[page_num]
                     for img_index, img in enumerate(page.get_images()):
                         try:
@@ -397,22 +447,218 @@ class DocumentAnalyzer:
                             if pix.n - pix.alpha < 4:  # 确保是RGB图像
                                 img_data = pix.tobytes("png")
                                 img_base64 = base64.b64encode(img_data).decode()
-                                images_info.append({
+                                
+                                # 水印检测
+                                watermark_result = self._detect_watermark_from_pixmap(pix)
+                                
+                                img_info = {
                                     'page': page_num + 1,
                                     'index': img_index,
                                     'base64': img_base64,
                                     'width': pix.width,
-                                    'height': pix.height
-                                })
+                                    'height': pix.height,
+                                    'size_kb': len(img_data) / 1024,
+                                    'format': 'PNG',
+                                    'watermark_detected': watermark_result['has_watermark'],
+                                    'watermark_confidence': watermark_result['confidence'],
+                                    'watermark_type': watermark_result['type']
+                                }
+                                images_info.append(img_info)
                             pix = None
-                        except:
+                        except Exception as e:
+                            # 记录图片处理错误，但继续处理其他图片
+                            print(f"处理第{page_num + 1}页第{img_index}张图片时出错: {str(e)}")
                             continue
                 doc.close()
+                
+            elif self.document_type == 'docx' and Document:
+                # DOCX图片处理
+                doc = Document(file_path)
+                
+                # 从关系中提取图片
+                img_index = 0
+                for rel in doc.part.rels.values():
+                    if "image" in rel.target_ref:
+                        try:
+                            img_data = rel.target_part.blob
+                            
+                            # 转换为PIL图像进行分析
+                            img_pil = Image.open(io.BytesIO(img_data))
+                            img_base64 = base64.b64encode(img_data).decode()
+                            
+                            # 水印检测
+                            watermark_result = self._detect_watermark_from_pil(img_pil)
+                            
+                            img_info = {
+                                'index': img_index,
+                                'base64': img_base64,
+                                'width': img_pil.width,
+                                'height': img_pil.height,
+                                'size_kb': len(img_data) / 1024,
+                                'format': img_pil.format or 'Unknown',
+                                'watermark_detected': watermark_result['has_watermark'],
+                                'watermark_confidence': watermark_result['confidence'],
+                                'watermark_type': watermark_result['type']
+                            }
+                            images_info.append(img_info)
+                            img_index += 1
+                            
+                        except Exception as e:
+                            print(f"处理DOCX图片{img_index}时出错: {str(e)}")
+                            continue
                         
         except Exception as e:
             print(f"图片提取失败: {str(e)}")
         
-        return images_info[:5]  # 最多返回5张图片
+        return images_info[:20]  # 最多返回20张图片
+    
+    def _detect_watermark_from_pixmap(self, pixmap) -> Dict[str, Any]:
+        """从PyMuPDF Pixmap检测水印"""
+        try:
+            # 转换为PIL图像进行分析
+            img_data = pixmap.tobytes("png")
+            img_pil = Image.open(io.BytesIO(img_data))
+            return self._detect_watermark_from_pil(img_pil)
+        except:
+            return {'has_watermark': False, 'confidence': 0.0, 'type': 'unknown'}
+    
+    def _detect_watermark_from_pil(self, img_pil: Image.Image) -> Dict[str, Any]:
+        """从PIL图像检测水印"""
+        try:
+            import numpy as np
+            
+            # 转换为RGB模式
+            if img_pil.mode != 'RGB':
+                img_pil = img_pil.convert('RGB')
+            
+            # 转换为numpy数组
+            img_array = np.array(img_pil)
+            
+            # 水印检测策略
+            result = {
+                'has_watermark': False,
+                'confidence': 0.0,
+                'type': 'none'
+            }
+            
+            # 1. 检查透明度（半透明水印）
+            if img_pil.mode in ['RGBA', 'LA']:
+                alpha_channel = img_array[:, :, -1] if img_pil.mode == 'RGBA' else img_array[:, :, 1]
+                alpha_variation = np.std(alpha_channel)
+                if alpha_variation > 30:  # 透明度变化较大，可能有水印
+                    result['confidence'] += 0.3
+                    result['type'] = 'transparent'
+            
+            # 2. 检查重复模式（重复水印）
+            gray = np.mean(img_array, axis=2) if len(img_array.shape) == 3 else img_array
+            
+            # 简单的模式检测：检查图像的方差
+            variance = np.var(gray)
+            if variance < 500:  # 方差较小可能表示有重复模式
+                result['confidence'] += 0.2
+                if result['type'] == 'none':
+                    result['type'] = 'pattern'
+            
+            # 3. 检查边缘区域（边框水印）
+            height, width = gray.shape
+            border_width = min(height, width) // 20
+            
+            if border_width > 5:
+                top_border = gray[:border_width, :]
+                bottom_border = gray[-border_width:, :]
+                left_border = gray[:, :border_width]
+                right_border = gray[:, -border_width:]
+                
+                # 检查边缘是否有特殊模式
+                borders = [top_border, bottom_border, left_border, right_border]
+                for border in borders:
+                    if np.std(border) > 20:  # 边缘有变化
+                        result['confidence'] += 0.1
+                        if result['type'] == 'none':
+                            result['type'] = 'border'
+            
+            # 4. 检查中心区域（中心水印）
+            center_h, center_w = height // 2, width // 2
+            quarter_h, quarter_w = height // 4, width // 4
+            
+            center_region = gray[center_h-quarter_h:center_h+quarter_h, 
+                               center_w-quarter_w:center_w+quarter_w]
+            
+            if center_region.size > 0:
+                center_std = np.std(center_region)
+                overall_std = np.std(gray)
+                
+                # 如果中心区域的变化与整体不同，可能有水印
+                if abs(center_std - overall_std) > 15:
+                    result['confidence'] += 0.2
+                    if result['type'] == 'none':
+                        result['type'] = 'center'
+            
+            # 5. 检查颜色分布（彩色水印）
+            if len(img_array.shape) == 3:
+                # 计算各颜色通道的分布
+                r_std = np.std(img_array[:, :, 0])
+                g_std = np.std(img_array[:, :, 1])
+                b_std = np.std(img_array[:, :, 2])
+                
+                # 如果某个通道特别突出，可能有彩色水印
+                max_std = max(r_std, g_std, b_std)
+                min_std = min(r_std, g_std, b_std)
+                
+                if max_std / (min_std + 1) > 2:  # 颜色分布不均
+                    result['confidence'] += 0.15
+                    if result['type'] == 'none':
+                        result['type'] = 'colored'
+            
+            # 最终判断
+            if result['confidence'] > 0.3:
+                result['has_watermark'] = True
+            
+            # 限制置信度在0-1之间
+            result['confidence'] = min(1.0, result['confidence'])
+            
+            return result
+            
+        except Exception as e:
+            print(f"水印检测失败: {str(e)}")
+            return {'has_watermark': False, 'confidence': 0.0, 'type': 'error'}
+    
+    def _analyze_watermarks(self, images_info: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """分析整个文档的水印情况"""
+        if not images_info:
+            return {'has_watermark': False, 'total_images': 0}
+        
+        watermark_count = sum(1 for img in images_info if img.get('watermark_detected', False))
+        total_images = len(images_info)
+        
+        # 收集水印类型
+        watermark_types = []
+        total_confidence = 0
+        
+        for img in images_info:
+            if img.get('watermark_detected', False):
+                watermark_types.append(img.get('watermark_type', 'unknown'))
+                total_confidence += img.get('watermark_confidence', 0)
+        
+        # 判断整个文档是否有水印
+        has_watermark = watermark_count > 0
+        avg_confidence = total_confidence / max(watermark_count, 1)
+        
+        # 确定主要水印类型
+        if watermark_types:
+            main_type = max(set(watermark_types), key=watermark_types.count)
+        else:
+            main_type = 'none'
+        
+        return {
+            'has_watermark': has_watermark,
+            'total_images': total_images,
+            'watermark_images': watermark_count,
+            'watermark_ratio': watermark_count / total_images if total_images > 0 else 0,
+            'confidence': avg_confidence,
+            'watermark_type': main_type,
+            'watermark_types': list(set(watermark_types))
+        }
     
     def _prepare_ai_analysis_data(self, analysis: Dict[str, Any]) -> Dict[str, Any]:
         """为AI分析准备结构化数据"""
