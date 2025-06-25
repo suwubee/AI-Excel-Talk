@@ -469,7 +469,20 @@ class EnhancedAIAnalyzer:
     def analyze_excel_structure(self, excel_data: Dict[str, pd.DataFrame]) -> str:
         """深度智能分析Excel文件结构和业务逻辑"""
         try:
-            prompt = "作为资深的业务数据分析专家，请对以下Excel文件进行深度业务理解和分析。我将提供每个工作表的前50行完整数据供您分析：\n\n"
+            # 增强提示词，包含文件路径和结构信息
+            prompt = "作为资深的业务数据分析专家，请对以下Excel文件进行深度业务理解和分析。我将提供每个工作表的前50行完整数据以及文件结构信息供您分析：\n\n"
+            
+            # 添加Excel文件基本信息（如果可用）
+            if hasattr(st.session_state, 'current_file_path') and st.session_state.current_file_path:
+                prompt += f"**📂 Excel文件信息:**\n"
+                prompt += f"- 文件路径: {st.session_state.current_file_path}\n"
+                prompt += f"- 文件名: {st.session_state.get('current_file_name', '未知文件')}\n\n"
+            
+            # 添加Excel结构分析（如果有轻量级分析结果）
+            if hasattr(st.session_state, 'quick_excel_analysis') and st.session_state.quick_excel_analysis:
+                prompt += f"**📋 Excel结构预分析:**\n"
+                prompt += f"{st.session_state.quick_excel_analysis}\n\n"
+                prompt += "---\n\n"
             
             for sheet_name, df in excel_data.items():
                 prompt += f"## 📋 工作表: {sheet_name}\n"
@@ -500,65 +513,48 @@ class EnhancedAIAnalyzer:
                     # 字段特征分析
                     prompt += f"### 🔍 字段特征分析:\n"
                     for col in df.columns:
-                        try:
-                            # 基本统计
-                            non_null_count = df[col].count()
-                            total_count = len(df)
-                            null_count = total_count - non_null_count
-                            
-                            prompt += f"**{col}**:\n"
-                            prompt += f"  - 数据完整性: {non_null_count}/{total_count} 非空 ({null_count}个缺失值)\n"
-                            
-                            # 数据类型分析
-                            dtype_info = str(df[col].dtype)
-                            prompt += f"  - 数据类型: {dtype_info}\n"
-                            
-                            # 唯一值分析
-                            if non_null_count > 0:
-                                unique_count = df[col].nunique()
-                                prompt += f"  - 唯一值数量: {unique_count}\n"
-                                
-                                # 获取示例值（修复tolist错误）
-                                non_null_series = df[col].dropna()
-                                if len(non_null_series) > 0:
-                                    sample_values = non_null_series.head(5).values.tolist()
-                                    prompt += f"  - 示例值: {sample_values}\n"
-                                
-                                # 对于数值类型，提供统计信息
-                                if pd.api.types.is_numeric_dtype(df[col]):
-                                    stats = df[col].describe()
-                                    prompt += f"  - 数值范围: [{stats['min']:.2f} - {stats['max']:.2f}]\n"
-                                    prompt += f"  - 平均值: {stats['mean']:.2f}, 中位数: {stats['50%']:.2f}\n"
-                                
-                                # 对于文本类型，提供频次分析
-                                elif df[col].dtype == 'object':
-                                    try:
-                                        value_counts = df[col].value_counts()
-                                        if len(value_counts) > 0:
-                                            top_values = value_counts.head(5)
-                                            # 修复FutureWarning: 使用.iloc而不是位置索引
-                                            top_values_dict = {}
-                                            for i in range(len(top_values)):
-                                                key = top_values.index[i]
-                                                value = top_values.iloc[i]
-                                                top_values_dict[key] = value
-                                            prompt += f"  - 高频值: {top_values_dict}\n"
-                                            
-                                            # 文本长度分析
-                                            text_lengths = df[col].dropna().astype(str).str.len()
-                                            if len(text_lengths) > 0:
-                                                avg_length = text_lengths.mean()
-                                                max_length = text_lengths.max()
-                                                prompt += f"  - 文本长度: 平均{avg_length:.1f}字符, 最大{max_length}字符\n"
-                                    except Exception as e:
-                                        prompt += f"  - 频次分析出错: {str(e)}\n"
+                        prompt += f"\n**{col}**:\n"
                         
-                        except Exception as e:
-                            prompt += f"**{col}**: 分析出错 - {str(e)}\n"
+                        # 数据类型
+                        dtype = str(df[col].dtype)
+                        prompt += f"  - 数据类型: {dtype}\n"
                         
-                        prompt += "\n"
-                
-                prompt += "\n" + "="*50 + "\n\n"
+                        # 缺失值统计
+                        missing_count = df[col].isnull().sum()
+                        prompt += f"  - 缺失值: {missing_count}/{len(df)} ({missing_count/len(df)*100:.1f}%)\n"
+                        
+                        # 唯一值数量
+                        unique_count = df[col].nunique()
+                        prompt += f"  - 唯一值数量: {unique_count}\n"
+                        
+                        # 获取示例值（修复tolist错误）
+                        non_null_series = df[col].dropna()
+                        if len(non_null_series) > 0:
+                            sample_values = non_null_series.head(5).values.tolist()
+                            prompt += f"  - 示例值: {sample_values}\n"
+                        
+                        # 对于数值类型，提供统计信息
+                        if pd.api.types.is_numeric_dtype(df[col]):
+                            try:
+                                stats = df[col].describe()
+                                prompt += f"  - 数值范围: [{stats['min']:.2f} - {stats['max']:.2f}]\n"
+                                prompt += f"  - 平均值: {stats['mean']:.2f}, 中位数: {stats['50%']:.2f}\n"
+                            except:
+                                prompt += f"  - 数值统计: 计算失败\n"
+                        
+                        # 对于文本类型，分析长度特征
+                        elif dtype == 'object':
+                            try:
+                                text_lengths = df[col].dropna().astype(str).str.len()
+                                if len(text_lengths) > 0:
+                                    prompt += f"  - 文本长度范围: {text_lengths.min()} - {text_lengths.max()}字符\n"
+                                    prompt += f"  - 平均长度: {text_lengths.mean():.1f}字符\n"
+                            except:
+                                prompt += f"  - 文本分析: 计算失败\n"
+                    
+                    prompt += "\n"
+                else:
+                    prompt += "### ⚠️ 工作表为空\n\n"
             
             # 分析提示
             prompt += """
@@ -593,17 +589,17 @@ class EnhancedAIAnalyzer:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是一位具有15年经验的资深业务数据分析师和商业顾问。你擅长从真实数据中洞察业务本质，发现商业价值，并提供可操作的分析建议。你的分析风格注重实用性和业务价值，能够将复杂的数据转化为清晰的商业洞察，帮助管理者做出明智决策。"},
+                    {"role": "system", "content": "你是一位资深的业务数据分析专家，具有丰富的跨行业数据分析经验。你能够从原始数据中敏锐地识别业务模式、发现价值洞察，并提出具有实际操作价值的分析建议。你的分析应该面向业务决策者，用清晰易懂的业务语言表达。"},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.7,
+                temperature=0.3,
                 max_tokens=3000
             )
             
             return response.choices[0].message.content
             
         except Exception as e:
-            return f"❌ AI分析出错: {str(e)}"
+            return f"分析过程中出现错误: {str(e)}"
     
     def chat_with_data(self, message: str, excel_data: Dict[str, pd.DataFrame], context: str = "") -> str:
         """与数据对话（保持原有功能）"""
@@ -665,9 +661,9 @@ class EnhancedAIAnalyzer:
                         sample_vals = list(values.values())[:2]
                         excel_structure_info += f"    * {col}: {sample_vals}\n"
             
-            # 可用变量信息
+            # 可用变量信息 - 强调使用变量而不是硬编码路径
             excel_structure_info += f"\n可用变量:\n"
-            excel_structure_info += f"- excel_file_path: 原始Excel文件路径\n"
+            excel_structure_info += f"- excel_file_path: 原始Excel文件路径（请使用此变量，不要硬编码文件名）\n"
             excel_structure_info += f"- excel_file_name: 文件名 ({excel_filename})\n"
             excel_structure_info += f"- sheet_names: 所有工作表名称列表\n"
             excel_structure_info += f"- sheet_info: 工作表详细信息字典\n"
@@ -682,38 +678,73 @@ class EnhancedAIAnalyzer:
 Excel文件完整结构信息:
 {excel_structure_info}
 
-请生成完整的Python代码来完成这个任务。代码要求：
+⚠️ 重要提醒：请生成完整的Python代码来完成这个任务。代码要求：
 
-1. **Excel文件级别操作**: 
+1. **文件路径处理** - 关键要求:
+   - 必须使用excel_file_path变量访问原始Excel文件，绝对不要硬编码文件名
+   - 如果需要重新读取Excel文件，使用：pd.read_excel(excel_file_path, sheet_name='xxx')
+   - 不要在代码中写入具体的文件名，如"20250625_171438_昆明移动商客经理人员学习成长路径v2.xlsx"
+   - 始终通过变量引用文件，确保代码的可移植性
+
+2. **Excel文件级别操作**: 
    - 可以使用excel_file_path访问原始Excel文件
-   - 可以使用pd.read_excel(excel_file_path, sheet_name='xxx')读取特定工作表
    - 支持复杂的Excel操作，如条件读取、自定义解析等
+   - 如果需要处理合并单元格，使用openpyxl库配合excel_file_path
 
-2. **跨工作表分析**:
+3. **跨工作表分析**:
    - 分析不同工作表之间的业务关系
    - 识别关联字段和数据流向
    - 实现跨表数据合并、比较、验证
 
-3. **综合数据处理**:
+4. **综合数据处理**:
    - 使用pandas进行高级数据处理
    - 包含必要的错误处理和数据验证
    - 添加详细的中文注释说明业务逻辑
 
-4. **结果输出**:
+5. **结果输出**:
    - 提供清晰的处理结果和统计信息
    - 如果需要修改数据，确保将结果保存回相应的df_变量
+   - 使用save_to_exports()函数保存生成的文件
    - 包含执行进度提示和关键节点输出
 
-5. **代码结构**:
+6. **代码结构**:
    - 确保代码可以直接执行
    - 包含必要的导入语句
    - 结构清晰，逻辑分明
+   - 开头添加文件路径检查，确保excel_file_path存在
+
+示例代码结构：
+```python
+import pandas as pd
+import openpyxl
+from pathlib import Path
+
+# 文件路径检查
+if excel_file_path is None:
+    print("❌ 错误：excel_file_path 未设置，请先上传Excel文件")
+    exit()
+
+if not Path(excel_file_path).exists():
+    print(f"❌ 错误：文件不存在: {{excel_file_path}}")
+    exit()
+
+print(f"📊 正在处理Excel文件: {{excel_file_name}}")
+print(f"📂 文件路径: {{excel_file_path}}")
+
+# 如果需要重新读取原始文件
+# workbook = openpyxl.load_workbook(excel_file_path)
+# df_new = pd.read_excel(excel_file_path, sheet_name='指定工作表')
+
+# 使用已加载的DataFrame进行处理
+# （代码继续...）
+```
 
 特别注意：
 - 如果任务涉及多个工作表，请分析它们的业务关系
 - 如果需要生成新的汇总或分析结果，请创建新的变量
 - 所有对原数据的修改都要保存回对应的df_变量中
 - 充分利用sheet_names和sheet_info变量来实现动态的工作表处理
+- 绝对不要在代码中硬编码文件名或路径
 
 请只返回纯Python代码，不要包含任何markdown格式标记。
 """
@@ -721,7 +752,7 @@ Excel文件完整结构信息:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是一个Excel数据分析和Python编程专家，专门生成高质量的Excel处理代码。你深度理解Excel文件结构、工作表关系和业务数据分析。只返回纯Python代码，不要包含任何markdown格式标记。"},
+                    {"role": "system", "content": "你是一个Excel数据分析和Python编程专家，专门生成高质量的Excel处理代码。你深度理解Excel文件结构、工作表关系和业务数据分析。你必须使用提供的变量（如excel_file_path）而不是硬编码文件名。只返回纯Python代码，不要包含任何markdown格式标记。"},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.1,
@@ -2881,7 +2912,7 @@ print("="*50)
                                 'os': os,
                                 'datetime': datetime,
                                 're': re,
-                                'traceback': traceback
+                                'traceback': traceback  # 确保traceback模块正确导入
                             }
                             
                             # 添加所有Excel工作表数据
@@ -2889,13 +2920,22 @@ print("="*50)
                                 safe_name = sheet_name.replace(' ', '_').replace('-', '_').replace('.', '_')
                                 exec_globals[f'df_{safe_name}'] = df.copy()  # 使用副本避免意外修改
                             
-                            # 添加Excel文件信息
+                            # 添加Excel文件信息 - 确保路径信息正确传递
                             if hasattr(st.session_state, 'current_file_path') and st.session_state.current_file_path:
-                                exec_globals['excel_file_path'] = st.session_state.current_file_path
-                                exec_globals['excel_file_name'] = st.session_state.get('current_file_name', 'unknown.xlsx')
+                                # 确保文件路径存在且可访问
+                                file_path = str(st.session_state.current_file_path)
+                                if Path(file_path).exists():
+                                    exec_globals['excel_file_path'] = file_path
+                                    exec_globals['excel_file_name'] = st.session_state.get('current_file_name', 'unknown.xlsx')
+                                    print(f"✅ Excel文件路径已设置: {file_path}")
+                                else:
+                                    exec_globals['excel_file_path'] = None
+                                    exec_globals['excel_file_name'] = "文件路径无效"
+                                    print(f"⚠️ 警告：文件路径不存在: {file_path}")
                             else:
                                 exec_globals['excel_file_path'] = None
                                 exec_globals['excel_file_name'] = "请先选择Excel文件"
+                                print("⚠️ 警告：未设置Excel文件路径")
                             
                             # 添加工作表关系信息
                             exec_globals['sheet_names'] = list(st.session_state.excel_data.keys())
