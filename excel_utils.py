@@ -1077,40 +1077,49 @@ class AdvancedExcelProcessor:
         self.structure_analysis = None
     
     def load_excel(self, file_path: str) -> Dict[str, pd.DataFrame]:
-        """智能加载Excel文件"""
+        """加载Excel文件，保证数据完整性，不跳过任何行"""
         self.file_path = file_path
         
-        # 首先进行结构分析
+        # 首先进行结构分析（但不影响数据读取）
         print("🔍 正在分析Excel文件结构...")
-        self.structure_analysis = self.analyzer.analyze_excel_structure(file_path)
+        try:
+            self.structure_analysis = self.analyzer.analyze_excel_structure(file_path)
+        except Exception as e:
+            print(f"⚠️ 结构分析失败，继续使用基础读取: {str(e)}")
+            self.structure_analysis = None
         
-        # 基于分析结果智能读取数据
+        # 使用完整数据读取方法，确保不丢失任何数据
         excel_data = {}
         
-        for sheet_name in self.structure_analysis['sheet_names']:
+        # 获取所有工作表名称
+        wb = openpyxl.load_workbook(file_path, data_only=True)
+        sheet_names = wb.sheetnames
+        
+        for sheet_name in sheet_names:
             print(f"📋 正在处理工作表: {sheet_name}")
             
-            sheet_analysis = self.structure_analysis['sheets_analysis'][sheet_name]
-            read_suggestions = sheet_analysis.get('read_suggestions', {})
-            
             try:
-                # 使用智能建议的参数读取数据
-                df, markdown = self._smart_read_sheet(file_path, sheet_name, read_suggestions)
+                # 使用完整读取方法，确保从第一行开始读取所有数据
+                df, markdown = self.read_excel_with_merged_cells_complete(file_path, sheet_name)
                 excel_data[sheet_name] = df
                 self.modified_data[sheet_name] = df.copy()
                 
                 # 打印读取摘要
-                print(f"  ✅ 成功读取: {len(df)}行 × {len(df.columns)}列")
-                if read_suggestions.get('warnings'):
-                    for warning in read_suggestions['warnings']:
-                        print(f"  ⚠️  {warning}")
+                print(f"  ✅ 成功读取: {len(df)}行 × {len(df.columns)}列 (完整数据)")
                 
             except Exception as e:
-                print(f"  ❌ 读取出错，使用基础方法: {str(e)}")
-                # 回退到基础读取方法
-                df, markdown = self.read_excel_with_merged_cells(file_path, sheet_name)
-                excel_data[sheet_name] = df
-                self.modified_data[sheet_name] = df.copy()
+                print(f"  ❌ 读取出错: {str(e)}")
+                # 最后的回退方法
+                try:
+                    df, markdown = self.read_excel_with_merged_cells(file_path, sheet_name)
+                    excel_data[sheet_name] = df
+                    self.modified_data[sheet_name] = df.copy()
+                    print(f"  ✅ 回退方法成功: {len(df)}行 × {len(df.columns)}列")
+                except Exception as e2:
+                    print(f"  ❌ 回退方法也失败: {str(e2)}")
+                    # 创建空DataFrame
+                    excel_data[sheet_name] = pd.DataFrame()
+                    self.modified_data[sheet_name] = pd.DataFrame()
         
         return excel_data
     
@@ -1215,6 +1224,89 @@ class AdvancedExcelProcessor:
                 print(f"    ⚠️  注意事项:")
                 for warning in suggestions['warnings']:
                     print(f"        • {warning}")
+    
+    @staticmethod
+    def read_excel_with_merged_cells_complete(file_path: str, sheet_name: str = None, max_rows: int = 1000) -> Tuple[pd.DataFrame, str]:
+        """读取Excel文件并处理合并单元格，确保从第一行开始读取所有数据，不跳过任何内容"""
+        try:
+            wb = openpyxl.load_workbook(file_path, data_only=True)
+            
+            if sheet_name is None:
+                sheet_name = wb.sheetnames[0]
+            
+            ws = wb[sheet_name]
+            
+            # 获取合并单元格信息
+            merged_cells = ws.merged_cells.ranges
+            merged_dict = {}
+            
+            # 创建合并单元格映射
+            for merged_range in merged_cells:
+                top_left_cell = ws.cell(row=merged_range.min_row, column=merged_range.min_col)
+                top_left_value = top_left_cell.value
+                
+                for row in range(merged_range.min_row, merged_range.max_row + 1):
+                    for col in range(merged_range.min_col, merged_range.max_col + 1):
+                        merged_dict[(row, col)] = top_left_value
+            
+            # 读取数据 - 从第一行开始，不跳过任何行
+            data = []
+            max_col = min(ws.max_column, 100)  # 限制最大列数
+            max_row = min(ws.max_row, max_rows)
+            
+            for row in range(1, max_row + 1):
+                row_data = []
+                for col in range(1, max_col + 1):
+                    # 检查是否是合并单元格
+                    if (row, col) in merged_dict:
+                        value = merged_dict[(row, col)]
+                    else:
+                        cell = ws.cell(row=row, column=col)
+                        value = cell.value
+                    
+                    row_data.append(value if value is not None else "")
+                
+                data.append(row_data)
+            
+            # 转换为DataFrame - 不自动使用第一行作为列名
+            if data:
+                # 生成列名：列1, 列2, 列3, ...
+                columns = [f"列{i+1}" for i in range(len(data[0]))]
+                
+                # 创建DataFrame，保留所有行的数据
+                df = pd.DataFrame(data, columns=columns)
+            else:
+                df = pd.DataFrame()
+            
+            # 清理数据 - 添加错误处理
+            try:
+                if not df.empty:
+                    # 对每列进行数据类型规范化，避免混合类型
+                    for col in df.columns:
+                        try:
+                            # 检查列是否包含混合类型
+                            if df[col].dtype == 'object':
+                                # 尝试将全部转换为字符串，避免混合类型
+                                df[col] = df[col].astype(str)
+                                # 将字符串'nan'和空字符串保持原样
+                                df[col] = df[col].replace('nan', '')
+                        except Exception as e:
+                            print(f"列 {col} 数据类型转换警告: {e}")
+                            # 如果转换失败，强制转换为字符串
+                            df[col] = df[col].astype(str).replace('nan', '')
+                    
+                    # 应用infer_objects
+                    df = df.infer_objects(copy=False)
+            except Exception as e:
+                print(f"数据清理时出现问题: {e}")
+            
+            # 生成markdown格式预览
+            markdown_content = AdvancedExcelProcessor.df_to_markdown(df, sheet_name)
+            
+            return df, markdown_content
+            
+        except Exception as e:
+            raise Exception(f"读取Excel文件时出错: {str(e)}")
     
     @staticmethod
     def read_excel_with_merged_cells(file_path: str, sheet_name: str = None, max_rows: int = 1000) -> Tuple[pd.DataFrame, str]:
@@ -1391,6 +1483,64 @@ class AdvancedExcelProcessor:
             markdown += "- *数据类型信息获取失败*\n"
         
         return markdown
+    
+    @staticmethod
+    def df_to_pure_markdown(df: pd.DataFrame) -> str:
+        """将DataFrame转换为纯净的Markdown表格格式，不包含任何分析信息"""
+        if df.empty:
+            return "*此工作表为空*\n"
+        
+        # 构建markdown表格
+        markdown_lines = []
+        
+        # 判断是否使用第一行作为表头
+        # 如果列名是"列1","列2"这样的通用名称，说明第一行是真正的表头数据
+        use_first_row_as_header = all(col.startswith("列") and col[1:].isdigit() for col in df.columns)
+        
+        if use_first_row_as_header and len(df) > 0:
+            # 使用第一行作为表头
+            first_row = df.iloc[0]
+            headers = []
+            for val in first_row:
+                if pd.isna(val) or str(val).strip() == "":
+                    headers.append("")
+                else:
+                    header_str = str(val).replace("|", "\\|").replace("\n", " ").replace("\r", "").strip()
+                    headers.append(header_str)
+            
+            markdown_lines.append("| " + " | ".join(headers) + " |")
+            markdown_lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
+            
+            # 从第二行开始作为数据行
+            data_rows = df.iloc[1:]
+        else:
+            # 使用DataFrame的列名作为表头
+            headers = [str(col) for col in df.columns]
+            markdown_lines.append("| " + " | ".join(headers) + " |")
+            markdown_lines.append("| " + " | ".join(["---"] * len(headers)) + " |")
+            
+            # 所有行都作为数据行
+            data_rows = df
+        
+        # 数据行
+        for idx, row in data_rows.iterrows():
+            row_data = []
+            for val in row:
+                # 处理空值和格式化
+                if pd.isna(val):
+                    str_val = ""
+                elif isinstance(val, float) and val.is_integer():
+                    str_val = str(int(val))
+                else:
+                    str_val = str(val)
+                
+                # 处理特殊字符，确保markdown表格格式正确
+                str_val = str_val.replace("|", "\\|").replace("\n", " ").replace("\r", "")
+                row_data.append(str_val)
+            
+            markdown_lines.append("| " + " | ".join(row_data) + " |")
+        
+        return "\n".join(markdown_lines)
     
     def update_dataframe(self, sheet_name: str, df: pd.DataFrame):
         """更新指定工作表的数据"""

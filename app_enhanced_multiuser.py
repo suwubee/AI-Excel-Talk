@@ -2330,7 +2330,7 @@ def main():
                         st.dataframe(preview_df, use_container_width=True)
                         
                         # 添加数据导出功能
-                        col_export_preview, col_export_full = st.columns(2)
+                        col_export_preview, col_export_full, col_export_markdown = st.columns(3)
                         
                         with col_export_preview:
                             if st.button("📥 导出预览数据", key=f"export_preview_{st.session_state.current_sheet}"):
@@ -2351,6 +2351,21 @@ def main():
                                     mime="text/csv",
                                     key=f"download_full_{st.session_state.current_sheet}"
                                 )
+                        
+                        with col_export_markdown:
+                            if st.button("📄 导出全文Markdown", key=f"export_markdown_{st.session_state.current_sheet}"):
+                                try:
+                                    # 将完整DataFrame转换为纯净的markdown表格格式
+                                    markdown_content = AdvancedExcelProcessor.df_to_pure_markdown(df)
+                                    st.download_button(
+                                        label="💾 下载Markdown格式",
+                                        data=markdown_content,
+                                        file_name=f"{st.session_state.current_sheet}_完整数据_{datetime.now().strftime('%Y%m%d_%H%M%S')}.md",
+                                        mime="text/markdown",
+                                        key=f"download_markdown_{st.session_state.current_sheet}"
+                                    )
+                                except Exception as e:
+                                    st.error(f"❌ Markdown导出失败: {str(e)}")
                         
                     except Exception as e:
                         st.warning(f"⚠️ 数据预览显示出现问题，使用文本格式展示")
@@ -3631,7 +3646,7 @@ print("="*50)
                             render_content_container(preview_content, 'document-preview')
                             
                             # 添加一些操作按钮
-                            col1, col2, col3 = st.columns(3)
+                            col1, col2, col3, col4 = st.columns(4)
                             with col1:
                                 if st.button("📋 复制内容"):
                                     st.info("💡 请使用浏览器的选择和复制功能")
@@ -3643,6 +3658,24 @@ print("="*50)
                                     mime="text/markdown"
                                 )
                             with col3:
+                                # 导出完整文档的markdown格式
+                                if st.button("📄 导出全文Markdown"):
+                                    try:
+                                        # 获取完整的文档内容
+                                        full_content = st.session_state.document_processor.analysis_result.get('preview_data', {}).get('content', '')
+                                        if full_content:
+                                            st.download_button(
+                                                label="💾 下载完整Markdown",
+                                                data=full_content,
+                                                file_name=f"{file_info.get('name', 'document')}_完整文档.md",
+                                                mime="text/markdown",
+                                                key="download_full_markdown"
+                                            )
+                                        else:
+                                            st.error("❌ 无法获取完整文档内容")
+                                    except Exception as e:
+                                        st.error(f"❌ 导出失败: {str(e)}")
+                            with col4:
                                 if st.button("🔄 刷新预览"):
                                     st.rerun()
                     else:
