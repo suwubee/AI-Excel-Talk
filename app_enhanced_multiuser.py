@@ -453,6 +453,37 @@ st.markdown("""
         background: linear-gradient(90deg, #1f77b4, #ff7f0e);
         color: white;
     }
+    
+    /* AI数据对话样式 */
+    .chat-message {
+        padding: 15px;
+        margin: 10px 0;
+        border-radius: 10px;
+    }
+    
+    .user-message {
+        background: linear-gradient(135deg, #1976d2, #c0e3f8);
+        border-left: 4px solid #1976d2;
+        text-align: left;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .assistant-message {
+        background: linear-gradient(135deg, #e8f5e8, #c0e8c0);
+        border-left: 4px solid #388e3c;
+        text-align: left;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    }
+    
+    .data-chat-container {
+        max-height: 500px;
+        overflow-y: auto;
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #9c27b0;
+        background-color: #f9f5fc;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -639,6 +670,480 @@ class EnhancedAIAnalyzer:
             
         except Exception as e:
             return f"❌ AI对话出错: {str(e)}"
+    
+    def analyze_data_request(self, request: str, excel_data: Dict[str, pd.DataFrame], excel_filename: str) -> Dict:
+        """分析用户数据请求，判断是否需要生成Python代码，并返回合适的响应
+        
+        参数:
+        - request: 用户的数据请求内容
+        - excel_data: Excel数据字典 {sheet_name: DataFrame}
+        - excel_filename: Excel文件名
+        
+        返回:
+        - Dict: {
+            'needs_code': bool,  # 是否需要生成Python代码
+            'code': str,  # 生成的Python代码（如果需要）
+            'analysis': str,  # 对数据的分析结果
+            'visualization_suggestion': str,  # 可视化建议
+        }
+        """
+        try:
+            # 构建增强的数据摘要
+            data_summary = "当前Excel数据完整概况：\n"
+            for sheet_name, df in excel_data.items():
+                data_summary += f"\n【工作表: {sheet_name}】\n"
+                data_summary += f"- 数据规模: {len(df)}行 × {len(df.columns)}列\n"
+                
+                # 显示所有字段名（重要！）
+                if len(df.columns) > 0:
+                    data_summary += f"- 完整字段列表({len(df.columns)}个字段): {df.columns.tolist()}\n"
+                    
+                    # 添加详细字段信息
+                    data_summary += "- 字段详细信息:\n"
+                    for i, col in enumerate(df.columns, 1):
+                        dtype = str(df[col].dtype)
+                        non_null_count = df[col].count() if not df.empty else 0
+                        data_summary += f"  {i}. '{col}' - 类型: {dtype}, 非空值: {non_null_count}/{len(df)}\n"
+                else:
+                    data_summary += "- 警告: 该工作表没有任何字段！\n"
+                
+                # 增强的数据样例显示
+                if not df.empty and len(df.columns) > 0:
+                    data_summary += "- 数据样例（前5行）:\n"
+                    try:
+                        # 显示所有字段的前5行数据
+                        sample_df = df.head(5)
+                        sample_str = sample_df.to_string(max_cols=None, max_rows=5)
+                        data_summary += f"```\n{sample_str}\n```\n"
+                    except Exception as e:
+                        data_summary += f"  (数据样例显示失败: {str(e)})\n"
+                        
+                    # 添加数据统计信息
+                    data_summary += "- 数据统计概览:\n"
+                    try:
+                        for col in df.columns:
+                            unique_count = df[col].nunique() if not df.empty else 0
+                            sample_values = df[col].dropna().head(3).tolist() if not df.empty else []
+                            sample_str = ", ".join([f"'{v}'" for v in sample_values]) if sample_values else "无"
+                            data_summary += f"  '{col}': {unique_count}个唯一值, 样例值: {sample_str}\n"
+                    except Exception as e:
+                        data_summary += f"  (统计信息生成失败: {str(e)})\n"
+                else:
+                    data_summary += "- 数据状态: 该工作表为空，没有数据行\n"
+                    if len(df.columns) > 0:
+                        data_summary += "- 即使数据为空，仍可根据字段名进行结构分析\n"
+            
+            prompt = f"""
+你是一位数据科学家，擅长分析用户的数据请求并提供合适的解决方案。请分析以下用户请求，并决定是否需要编写Python代码来完成请求。
+
+Excel文件: {excel_filename}
+{data_summary}
+
+用户请求: {request}
+
+重要提示：
+- 字段名称是动态的，请根据上述数据摘要中的实际字段来分析
+- 不要硬编码字段名，而是根据用户的语义需求智能匹配相关字段
+- 例如：用户说"销售额"，可能对应字段"销售金额"、"销售价格"、"金额"、"执行价格"等
+- 例如：用户说"客户"，可能对应字段"客户名称"、"客户PO号"、"客户"、"用户名"等
+- 即使数据为空（0行），也要根据字段名称进行智能分析和建议
+- 如果数据为空，应该：
+  1. 分析字段名称的含义和用途
+  2. 解释这些字段可以支持什么样的分析
+  3. 提供数据填充建议
+  4. 说明预期的分析结果
+- 使用字段搜索方法：根据关键词匹配相关字段，而不是硬编码字段名
+- 可用的辅助函数：
+  * safe_column_access(df, column_name) - 安全访问列
+  * check_columns_exist(df, columns) - 检查多个列是否存在
+  * find_columns_by_keywords(df, keywords) - 根据关键词搜索字段
+- 预定义变量：available_columns, required_columns, missing_columns, existing_cols, missing_cols
+
+请分析这个请求并提供以下内容:
+1. 判断是否需要生成Python代码来回答用户的请求（是/否）
+2. 如果需要代码，请提供符合以下规则的Python代码:
+   - 代码应当清晰、高效，并包含适当的注释
+   - 使用变量名"current_df"来表示用户当前正在查看的数据框
+   - 代码执行后应该生成明确的结果数据
+   - 避免使用print语句，而是将结果保存到变量中
+   - 如果需要可视化，使用plotly生成图表并保存到变量
+   - 编写代码时请遵循以下模式：
+     1. 获取所有字段：all_columns = current_df.columns.tolist()
+     2. 根据用户需求搜索相关字段，例如：
+        - 销售相关：find_columns_by_keywords(current_df, ['销售', '金额', '价格', '执行价格'])
+        - 客户相关：find_columns_by_keywords(current_df, ['客户', '用户', '名称', 'PO'])
+     3. 检查数据情况：
+        - 如果数据为空（len(current_df) == 0），说明数据结构和字段意义
+        - 如果找到字段但数据为空，解释字段用途和分析潜力
+        - 如果有数据，则进行具体分析
+     4. 将最终结果存储在 result 变量中，包含分析结果或结构说明
+3. 对数据进行深入分析，找出潜在的业务机会或洞察
+4. 提供数据可视化的建议（如适用）
+
+请以JSON格式返回你的分析结果，包含以下字段:
+- needs_code: 布尔值，表示是否需要生成代码
+- code: 字符串，生成的Python代码（如果needs_code为true）
+- analysis: 字符串，对数据的分析结果和洞察
+- visualization_suggestion: 字符串，可视化建议（如适用）
+"""
+            
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "你是一位专业的数据科学家，擅长理解用户需求并提供准确、实用的Python代码和数据分析。你的回答应始终符合JSON格式，包含needs_code, code, analysis, visualization_suggestion字段。"},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=2500,
+                response_format={"type": "json_object"}
+            )
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            # 确保所有必需的字段都存在
+            if 'needs_code' not in result:
+                result['needs_code'] = False
+            if 'code' not in result:
+                result['code'] = ""
+            if 'analysis' not in result:
+                result['analysis'] = "无法生成分析。"
+            if 'visualization_suggestion' not in result:
+                result['visualization_suggestion'] = ""
+                
+            return result
+            
+        except Exception as e:
+            return {
+                'needs_code': False,
+                'code': "",
+                'analysis': f"分析过程中出现错误: {str(e)}",
+                'visualization_suggestion': ""
+            }
+    
+    def intelligent_data_analysis(self, request: str, excel_data: Dict[str, pd.DataFrame], excel_filename: str, current_sheet: str, progress_callback=None) -> Dict:
+        """智能数据分析Agent - 完整的自动化分析流程
+        
+        参数:
+        - request: 用户的数据请求内容
+        - excel_data: Excel数据字典 {sheet_name: DataFrame}
+        - excel_filename: Excel文件名
+        - current_sheet: 当前选中的工作表名称
+        
+        返回:
+        - Dict: {
+            'success': bool,  # 是否成功
+            'analysis': str,  # 最终分析结果
+            'execution_output': str,  # 代码执行输出（如果有）
+            'visualization_suggestion': str,  # 可视化建议
+            'debug_info': Dict  # 调试信息（可选）
+        }
+        """
+        try:
+            # 第一步：分析用户请求
+            if progress_callback:
+                progress_callback("initial_analysis", "正在分析用户需求并生成分析代码...")
+            
+            initial_analysis = self.analyze_data_request(request, excel_data, excel_filename)
+            
+            if not initial_analysis['needs_code']:
+                # 如果不需要代码，直接返回分析结果
+                if progress_callback:
+                    progress_callback("final_analysis", "生成最终分析报告...")
+                
+                return {
+                    'success': True,
+                    'analysis': initial_analysis['analysis'],
+                    'execution_output': "",
+                    'visualization_suggestion': initial_analysis['visualization_suggestion'],
+                    'debug_info': {'step': 'direct_analysis', 'needs_code': False}
+                }
+            
+            # 第二步：执行生成的代码
+            if progress_callback:
+                progress_callback("code_execution", "正在执行数据分析代码...")
+            try:
+                current_df = excel_data[current_sheet]
+                
+                # 准备执行环境
+                exec_globals = {
+                    'pd': pd,
+                    'np': np,
+                    'px': px,
+                    'go': go,
+                    'current_df': current_df.copy(),
+                    'datetime': datetime,
+                    're': re,
+                    # 预定义常用变量以避免NameError
+                    'result': None,
+                    'summary': None,
+                    'analysis_result': None,
+                    'output': None,
+                    'final_result': None,
+                    'answer': None,
+                    'available_columns': current_df.columns.tolist(),
+                    'all_columns': current_df.columns.tolist(),  # 添加这个常用变量
+                    'required_columns': [],
+                    'missing_columns': [],
+                    'existing_cols': [],
+                    'missing_cols': [],
+                    'sales_cols': [],
+                    'customer_cols': [],
+                    'sales_keywords': ['销售', '金额', '价格', '收入', '费用', '成本'],
+                    'customer_keywords': ['客户', '用户', '名称', '公司', '企业']
+                }
+                
+                # 添加所有工作表数据
+                for sheet_name, df in excel_data.items():
+                    safe_name = sheet_name.replace(' ', '_').replace('-', '_').replace('.', '_')
+                    exec_globals[f'df_{safe_name}'] = df.copy()
+                
+                # 添加一些常用的辅助函数
+                def safe_column_access(df, column_name):
+                    """安全访问列，如果列不存在返回None"""
+                    if column_name in df.columns:
+                        return df[column_name]
+                    else:
+                        return None
+                
+                def check_columns_exist(df, columns):
+                    """检查列是否存在，返回(存在的列, 缺失的列)"""
+                    existing_cols = [col for col in columns if col in df.columns]
+                    missing_cols = [col for col in columns if col not in df.columns]
+                    return existing_cols, missing_cols
+                
+                def find_columns_by_keywords(df, keywords):
+                    """根据关键词搜索匹配的字段"""
+                    matches = []
+                    for col in df.columns:
+                        for keyword in keywords:
+                            if keyword in str(col):
+                                matches.append(col)
+                    return list(set(matches))
+                
+                exec_globals['safe_column_access'] = safe_column_access
+                exec_globals['check_columns_exist'] = check_columns_exist
+                exec_globals['find_columns_by_keywords'] = find_columns_by_keywords
+                
+                # 重定向输出以捕获结果
+                import sys
+                from io import StringIO
+                old_stdout = sys.stdout
+                sys.stdout = mystdout = StringIO()
+                
+                # 执行代码
+                exec(initial_analysis['code'], exec_globals)
+                
+                # 恢复输出
+                sys.stdout = old_stdout
+                execution_output = mystdout.getvalue()
+                
+                # 提取执行结果的关键变量
+                result_summary = self._extract_execution_results(exec_globals, initial_analysis['code'])
+                
+            except Exception as code_error:
+                # 获取更详细的错误信息
+                import traceback
+                error_details = traceback.format_exc()
+                
+                # 检查是否是变量未定义错误
+                if "is not defined" in str(code_error):
+                    error_msg = f"变量未定义错误: {str(code_error)}\n\n"
+                    error_msg += f"可用变量: {list(exec_globals.keys())}\n\n"
+                    error_msg += f"生成的代码:\n{initial_analysis.get('code', 'N/A')}\n\n"
+                    error_msg += f"错误详情:\n{error_details}"
+                else:
+                    error_msg = f"代码执行失败: {str(code_error)}\n\n详细错误信息:\n{error_details}"
+                
+                return {
+                    'success': False,
+                    'analysis': error_msg,
+                    'execution_output': "",
+                    'visualization_suggestion': "",
+                    'debug_info': {
+                        'step': 'code_execution_error', 
+                        'error': str(code_error),
+                        'full_traceback': error_details,
+                        'generated_code': initial_analysis.get('code', 'N/A'),
+                        'available_vars': list(exec_globals.keys())
+                    }
+                }
+            
+            # 第三步：基于执行结果进行深度分析
+            if progress_callback:
+                progress_callback("final_analysis", "基于执行结果生成深度分析...")
+            
+            final_analysis = self._analyze_execution_results(
+                request, 
+                result_summary, 
+                execution_output,
+                excel_data, 
+                excel_filename,
+                current_sheet
+            )
+            
+            return {
+                'success': True,
+                'analysis': final_analysis['analysis'],
+                'execution_output': execution_output,
+                'visualization_suggestion': final_analysis['visualization_suggestion'],
+                'debug_info': {
+                    'step': 'complete_analysis',
+                    'code_executed': True,
+                    'result_summary': result_summary
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'analysis': f"智能分析失败: {str(e)}",
+                'execution_output': "",
+                'visualization_suggestion': "",
+                'debug_info': {'step': 'general_error', 'error': str(e)}
+            }
+    
+    def _extract_execution_results(self, exec_globals: Dict, code: str) -> str:
+        """从执行环境中提取关键结果"""
+        try:
+            result_parts = []
+            
+            # 检查常见的结果变量
+            result_vars = ['result', 'summary', 'analysis_result', 'output', 'final_result', 'answer']
+            for var_name in result_vars:
+                if var_name in exec_globals:
+                    value = exec_globals[var_name]
+                    if hasattr(value, 'to_string'):  # DataFrame
+                        try:
+                            preview = value.head(10).to_string() if len(value) > 10 else value.to_string()
+                            result_parts.append(f"{var_name} (DataFrame {value.shape[0]}行×{value.shape[1]}列):\n{preview}")
+                        except:
+                            result_parts.append(f"{var_name}: DataFrame {value.shape}")
+                    elif isinstance(value, (list, tuple, dict)):
+                        result_parts.append(f"{var_name}: {value}")
+                    elif isinstance(value, (int, float, str)):
+                        result_parts.append(f"{var_name}: {value}")
+                    else:
+                        result_parts.append(f"{var_name}: {str(value)}")
+            
+            # 检查是否有新的DataFrame被创建
+            # 排除的系统变量和函数
+            excluded_vars = [
+                'pd', 'np', 'px', 'go', 'current_df', 'datetime', 're', 
+                'available_columns', 'all_columns', 'required_columns', 'missing_columns', 
+                'existing_cols', 'missing_cols', 'sales_cols', 'customer_cols',
+                'sales_keywords', 'customer_keywords',
+                'safe_column_access', 'check_columns_exist', 'find_columns_by_keywords'
+            ]
+            
+            for var_name, value in exec_globals.items():
+                if (var_name not in excluded_vars
+                    and not var_name.startswith('df_') 
+                    and not var_name.startswith('__')
+                    and var_name not in result_vars
+                    and hasattr(value, 'shape') 
+                    and hasattr(value, 'to_string')):
+                    try:
+                        # 只取前10行避免输出过长
+                        preview = value.head(10).to_string() if len(value) > 10 else value.to_string()
+                        result_parts.append(f"生成的数据表 {var_name} ({value.shape[0]}行×{value.shape[1]}列):\n{preview}")
+                    except:
+                        result_parts.append(f"生成的数据表 {var_name}: {value.shape}")
+            
+            # 如果没有找到明确的结果变量，检查是否有其他有用的输出
+            if not result_parts:
+                # 列出所有新创建的变量（不包括内置变量）
+                new_vars = []
+                for var_name, value in exec_globals.items():
+                    if (not var_name.startswith('__') 
+                        and var_name not in excluded_vars
+                        and not var_name.startswith('df_')):
+                        if isinstance(value, (str, int, float, list, dict)):
+                            new_vars.append(f"{var_name}: {value}")
+                        else:
+                            new_vars.append(f"{var_name}: {type(value).__name__}")
+                
+                if new_vars:
+                    result_parts.append("执行产生的变量:\n" + "\n".join(new_vars))
+            
+            return "\n\n".join(result_parts) if result_parts else "代码执行完成，未发现明确的结果变量"
+            
+        except Exception as e:
+            return f"结果提取失败: {str(e)}"
+    
+    def _analyze_execution_results(self, original_request: str, execution_results: str, execution_output: str, 
+                                 excel_data: Dict[str, pd.DataFrame], excel_filename: str, current_sheet: str) -> Dict:
+        """基于代码执行结果进行最终分析"""
+        try:
+            # 构建分析提示词
+            prompt = f"""
+作为一位资深的数据分析师，请基于以下信息为用户提供完整、深入的分析报告：
+
+**用户原始请求**: {original_request}
+
+**Excel文件**: {excel_filename}
+**当前分析的工作表**: {current_sheet}
+
+**代码执行结果**:
+{execution_results}
+
+**执行过程输出**:
+{execution_output}
+
+**请提供以下分析**:
+
+1. **直接回答用户的问题** - 基于执行结果，明确回答用户的具体需求
+
+2. **数据洞察与发现** - 从结果中识别出的重要趋势、模式或异常
+
+3. **业务建议** - 基于分析结果，提供具体的行动建议或关注重点
+
+4. **进一步分析方向** - 建议用户可以继续深入分析的方向
+
+请用中文回复，语言要专业但易懂，重点突出实际业务价值。
+"""
+
+            response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "你是一位资深的业务数据分析师，擅长从数据分析结果中提取业务洞察，并提供实用的建议。你的分析应该结合数据结果和业务实际，提供有价值的见解。"},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=2000
+            )
+            
+            analysis_result = response.choices[0].message.content
+            
+            # 生成可视化建议
+            viz_prompt = f"""
+基于以下分析结果和用户请求，提供具体的数据可视化建议：
+
+用户请求: {original_request}
+分析结果: {execution_results[:500]}...
+
+请推荐最适合的图表类型和可视化方案，说明为什么这些可视化方式能够最好地展示数据洞察。
+"""
+            
+            viz_response = self.client.chat.completions.create(
+                model=self.model,
+                messages=[
+                    {"role": "system", "content": "你是数据可视化专家，擅长推荐最适合的图表类型来展示数据洞察。"},
+                    {"role": "user", "content": viz_prompt}
+                ],
+                temperature=0.3,
+                max_tokens=800
+            )
+            
+            return {
+                'analysis': analysis_result,
+                'visualization_suggestion': viz_response.choices[0].message.content
+            }
+            
+        except Exception as e:
+            return {
+                'analysis': f"最终分析生成失败: {str(e)}。\n\n基础执行结果：\n{execution_results}",
+                'visualization_suggestion': "由于分析过程出现问题，暂无可视化建议。"
+            }
 
     def generate_enhanced_code_solution(self, task_description: str, enhanced_excel_data: Dict, excel_filename: str) -> str:
         """生成增强的Excel代码解决方案，包含完整的Excel文件和工作表关系信息"""
@@ -2232,7 +2737,7 @@ def main():
     
     # 主要界面：根据分析模式显示不同的Tabs
     if analysis_mode == "📊 Excel分析" and st.session_state.excel_data:
-        tab1, tab2, tab3, tab4 = st.tabs(["📋 数据预览与管理", "🤖 AI 智能分析", "💻 代码执行", "🛠️ 数据工具"])
+        tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 数据预览与管理", "🤖 AI 智能分析", "💻 代码执行", "🛠️ 数据工具", "🧠 AI 数据对话"])
     elif analysis_mode == "📄 文档分析" and st.session_state.document_data:
         doc_tab1, doc_tab2, doc_tab3, doc_tab4 = st.tabs(["📄 文档预览", "🤖 AI 文档分析", "💻 代码执行", "🔍 搜索工具"])
     
@@ -3597,6 +4102,275 @@ print("="*50)
                     else:
                         st.error("❌ 无法访问用户工作空间")
             
+            else:
+                st.info("📋 请先在'数据预览'标签中选择工作表")
+        
+        # Tab 5: AI数据对话
+        with tab5:
+            st.header("🧠 AI 数据对话")
+            st.info("💬 智能Agent自动分析您的数据请求，执行必要的代码并提供完整分析结果")
+            
+            if st.session_state.current_sheet:
+                current_df = st.session_state.excel_data[st.session_state.current_sheet]
+                
+                # 初始化对话历史
+                if 'data_chat_history' not in st.session_state:
+                    st.session_state.data_chat_history = []
+                
+                # 显示数据信息摘要
+                st.markdown("### 📊 当前数据")
+                col_info1, col_info2, col_info3, col_debug = st.columns([2, 2, 2, 1])
+                
+                with col_info1:
+                    st.metric("工作表", st.session_state.current_sheet)
+                
+                with col_info2:
+                    st.metric("数据行数", len(current_df))
+                
+                with col_info3:
+                    st.metric("字段数量", len(current_df.columns))
+                
+                with col_debug:
+                    debug_mode = st.checkbox("🔧 调试模式", value=False, help="显示代码执行过程")
+                
+                # 字段信息
+                with st.expander("📝 数据字段信息", expanded=False):
+                    field_info = []
+                    for col in current_df.columns:
+                        dtype = str(current_df[col].dtype)
+                        non_null = current_df[col].count()
+                        total = len(current_df)
+                        field_info.append({
+                            "字段名": col,
+                            "数据类型": dtype,
+                            "非空值": f"{non_null}/{total}",
+                            "样例": str(current_df[col].iloc[0]) if not current_df[col].empty else "无"
+                        })
+                    
+                    field_df = pd.DataFrame(field_info)
+                    st.dataframe(field_df, use_container_width=True)
+                
+                # 聊天历史容器
+                st.markdown("### 💬 智能对话")
+                chat_container = st.container()
+                
+                with chat_container:
+                    if st.session_state.data_chat_history:
+                        for i, message in enumerate(st.session_state.data_chat_history):
+                            if message['role'] == 'user':
+                                st.markdown(f'<div class="chat-message user-message">🧑‍💼 您: {message["content"]}</div>', unsafe_allow_html=True)
+                            else:
+                                st.markdown(f'<div class="chat-message assistant-message">🤖 AI Agent: {message["content"]}</div>', unsafe_allow_html=True)
+                                
+                                # 显示可视化建议（仅在调试模式下显示）
+                                if debug_mode and 'visualization_suggestion' in message and message['visualization_suggestion']:
+                                    with st.expander("📈 数据可视化建议", expanded=False):
+                                        st.markdown(message['visualization_suggestion'])
+                                
+                                # 调试模式下显示执行过程
+                                if debug_mode and 'debug_info' in message:
+                                    with st.expander(f"🔧 调试信息 #{i+1}", expanded=False):
+                                        st.json(message['debug_info'])
+                
+                # 用户输入
+                user_input = st.text_area("💭 请描述您的数据分析需求：", 
+                                         placeholder="例如：汇总分析所有客户的销售金额，找出销售规律\n分析各个客户的销售额分布情况\n找出销售额最高的前10个客户",
+                                         height=100,
+                                         key="data_chat_input")
+                
+                col_send, col_clear = st.columns([1, 1])
+                
+                with col_send:
+                    submit_analysis = st.button("🚀 智能分析", type="primary", use_container_width=True)
+                
+                # 处理分析请求（在所有widget定义之后）
+                if submit_analysis and user_input and user_input.strip():
+                    # 添加用户消息到历史
+                    st.session_state.data_chat_history.append({
+                        'role': 'user',
+                        'content': user_input
+                    })
+                    
+                    # 调用智能Agent进行完整分析
+                    progress_container = st.container()
+                    with progress_container:
+                        progress_bar = st.progress(0)
+                        status_text = st.empty()
+                        log_container = st.container()
+                        
+                        try:
+                            # 步骤1：初始化分析器
+                            with status_text:
+                                st.info("🔍 步骤 1/5: 初始化AI分析器...")
+                            progress_bar.progress(10)
+                            
+                            if debug_mode:
+                                with log_container:
+                                    st.write("🔧 调试: 创建AI分析器实例...")
+                            
+                            ai_analyzer = EnhancedAIAnalyzer(
+                                api_key=api_key,
+                                base_url=base_url,
+                                model=selected_model
+                            )
+                            
+                            # 步骤2：准备数据
+                            with status_text:
+                                st.info("📊 步骤 2/5: 准备数据和文件信息...")
+                            progress_bar.progress(20)
+                            
+                            # 获取文件名
+                            file_name = "未知文件"
+                            if hasattr(st.session_state, 'current_file_path') and st.session_state.current_file_path:
+                                if hasattr(st.session_state.current_file_path, 'name'):
+                                    file_name = st.session_state.current_file_path.name
+                                else:
+                                    file_name = str(st.session_state.current_file_path)
+                            
+                            if debug_mode:
+                                with log_container:
+                                    st.write(f"🔧 调试: 文件名={file_name}, 当前工作表={st.session_state.current_sheet}")
+                                    st.write(f"🔧 调试: 数据表数量={len(st.session_state.excel_data)}")
+                            
+                            # 步骤3：AI智能分析
+                            with status_text:
+                                st.info("🧠 步骤 3/5: AI正在理解您的需求...")
+                            progress_bar.progress(30)
+                            
+                            if debug_mode:
+                                with log_container:
+                                    st.write(f"🔧 调试: 用户请求='{user_input}'")
+                                    st.write("🔧 调试: 开始调用intelligent_data_analysis...")
+                            
+                            # 更新进度回调函数
+                            def update_progress(step, message):
+                                if step == "initial_analysis":
+                                    with status_text:
+                                        st.info("🔍 步骤 4/5: AI分析数据需求...")
+                                    progress_bar.progress(50)
+                                elif step == "code_generation":
+                                    with status_text:
+                                        st.info("⚙️ 步骤 4/5: 生成分析代码...")
+                                    progress_bar.progress(60)
+                                elif step == "code_execution":
+                                    with status_text:
+                                        st.info("🏃 步骤 4/5: 执行数据分析...")
+                                    progress_bar.progress(70)
+                                elif step == "final_analysis":
+                                    with status_text:
+                                        st.info("📋 步骤 5/5: 生成智能报告...")
+                                    progress_bar.progress(85)
+                                
+                                if debug_mode:
+                                    with log_container:
+                                        st.write(f"🔧 调试: {step} - {message}")
+                            
+                            # 传递进度回调给分析器
+                            analysis_result = ai_analyzer.intelligent_data_analysis(
+                                user_input,
+                                st.session_state.excel_data,
+                                file_name,
+                                st.session_state.current_sheet,
+                                progress_callback=update_progress
+                            )
+                            
+                            # 步骤4：处理分析结果
+                            with status_text:
+                                st.info("📊 步骤 5/5: 整理分析结果...")
+                            progress_bar.progress(95)
+                            
+                            if analysis_result['success']:
+                                # 添加成功的AI响应到历史
+                                ai_response = {
+                                    'role': 'assistant',
+                                    'content': analysis_result['analysis'],
+                                    'visualization_suggestion': analysis_result.get('visualization_suggestion', ''),
+                                    'debug_info': analysis_result.get('debug_info', {}) if debug_mode else {}
+                                }
+                                
+                                st.session_state.data_chat_history.append(ai_response)
+                                
+                                # 显示成功状态
+                                with status_text:
+                                    st.success("✅ 分析完成！AI已生成完整报告")
+                                progress_bar.progress(100)
+                                
+                                if debug_mode:
+                                    with log_container:
+                                        st.write("🔧 调试: 分析成功完成")
+                                
+                            else:
+                                # 处理分析失败的情况
+                                error_response = {
+                                    'role': 'assistant',
+                                    'content': f"❌ 分析失败：{analysis_result['analysis']}",
+                                    'debug_info': analysis_result.get('debug_info', {}) if debug_mode else {}
+                                }
+                                
+                                st.session_state.data_chat_history.append(error_response)
+                                
+                                with status_text:
+                                    st.error("❌ 分析失败，请检查问题描述")
+                                progress_bar.progress(100)
+                                
+                                if debug_mode:
+                                    with log_container:
+                                        st.write(f"🔧 调试: 分析失败 - {analysis_result.get('debug_info', {})}")
+                            
+                        except Exception as e:
+                            with status_text:
+                                st.error(f"❌ 系统错误: {str(e)}")
+                            
+                            if debug_mode:
+                                with log_container:
+                                    st.write(f"🔧 调试: 系统异常 - {str(e)}")
+                                    import traceback
+                                    st.code(traceback.format_exc())
+                            
+                            error_response = {
+                                'role': 'assistant',
+                                'content': f"❌ 系统错误：{str(e)}",
+                                'debug_info': {'error': str(e)} if debug_mode else {}
+                            }
+                            st.session_state.data_chat_history.append(error_response)
+                        
+                        # 显示完成状态几秒钟再清理
+                        import time
+                        time.sleep(2)
+                        
+                        # 清理进度显示（在成功后）
+                        if 'analysis_result' in locals() and analysis_result.get('success'):
+                            progress_bar.empty()
+                            status_text.empty()
+                            if debug_mode:
+                                log_container.empty()
+                    
+                    # 刷新页面以清空输入框
+                    st.rerun()
+                
+                with col_clear:
+                    if st.button("🗑️ 清空对话", use_container_width=True):
+                        st.session_state.data_chat_history = []
+                        st.rerun()
+                
+                # 使用提示
+                with st.expander("💡 使用提示", expanded=False):
+                    st.markdown("""
+                    **AI数据对话Agent功能：**
+                    
+                    - 🤖 **智能理解**：自动理解您的数据分析需求
+                    - 🔍 **自动分析**：判断是否需要生成和执行Python代码
+                    - ⚡ **自动执行**：在后台自动执行分析代码
+                    - 📊 **完整报告**：提供基于实际数据结果的深度分析
+                    - 🎯 **业务洞察**：给出具体的业务建议和行动方向
+                    
+                    **示例问题：**
+                    - "分析各个客户的销售额分布情况"
+                    - "找出销售额最高的前10个客户"
+                    - "计算每个月的销售趋势"
+                    - "分析产品类别的平均价格"
+                    - "找出异常的销售数据"
+                    """)
             else:
                 st.info("📋 请先在'数据预览'标签中选择工作表")
     

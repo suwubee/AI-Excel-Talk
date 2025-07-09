@@ -1268,13 +1268,59 @@ class AdvancedExcelProcessor:
                 
                 data.append(row_data)
             
-            # 转换为DataFrame - 不自动使用第一行作为列名
+            # 智能处理列名：尝试使用第一行作为字段名
             if data:
-                # 生成列名：列1, 列2, 列3, ...
-                columns = [f"列{i+1}" for i in range(len(data[0]))]
-                
-                # 创建DataFrame，保留所有行的数据
-                df = pd.DataFrame(data, columns=columns)
+                if len(data) > 1:
+                    # 检查第一行是否看起来像字段名
+                    first_row = data[0]
+                    looks_like_headers = True
+                    
+                    # 检查第一行是否主要包含文本且不全为空
+                    non_empty_count = 0
+                    text_count = 0
+                    
+                    for cell_value in first_row:
+                        if cell_value is not None and str(cell_value).strip():
+                            non_empty_count += 1
+                            # 检查是否为文本（非纯数字）
+                            try:
+                                float(str(cell_value))
+                            except (ValueError, TypeError):
+                                text_count += 1
+                    
+                    # 如果第一行有足够的文本内容，认为是字段名
+                    if non_empty_count > 0 and text_count / non_empty_count > 0.5:
+                        # 使用第一行作为列名
+                        columns = []
+                        column_counts = {}
+                        
+                        for i, col_value in enumerate(first_row):
+                            if col_value is None or str(col_value).strip() == "":
+                                base_name = f"列{i+1}"
+                            else:
+                                base_name = str(col_value).strip()
+                            
+                            # 处理重复列名
+                            if base_name in column_counts:
+                                column_counts[base_name] += 1
+                                unique_name = f"{base_name}_{column_counts[base_name]}"
+                            else:
+                                column_counts[base_name] = 0
+                                unique_name = base_name
+                            
+                            columns.append(unique_name)
+                        
+                        # 从第二行开始作为数据
+                        data_rows = data[1:] if len(data) > 1 else []
+                        df = pd.DataFrame(data_rows, columns=columns)
+                    else:
+                        # 第一行不像字段名，生成默认列名并保留所有数据
+                        columns = [f"列{i+1}" for i in range(len(data[0]))]
+                        df = pd.DataFrame(data, columns=columns)
+                else:
+                    # 只有一行数据，生成默认列名
+                    columns = [f"列{i+1}" for i in range(len(data[0]))]
+                    df = pd.DataFrame(data, columns=columns)
             else:
                 df = pd.DataFrame()
             

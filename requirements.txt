@@ -20,3 +20,6 @@ Pillow>=9.0.0           # 图像处理
 pdfplumber>=0.9.0       # PDF表格和布局分析
 docx2txt>=0.8           # DOCX纯文本提取
 textract>=1.6.5         # 多格式文档提取（可选） 
+
+matplotlib
+seaborn
