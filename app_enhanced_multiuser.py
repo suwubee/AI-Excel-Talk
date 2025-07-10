@@ -633,18 +633,60 @@ class EnhancedAIAnalyzer:
             return f"分析过程中出现错误: {str(e)}"
     
     def chat_with_data(self, message: str, excel_data: Dict[str, pd.DataFrame], context: str = "") -> str:
-        """与数据对话（保持原有功能）"""
+        """与数据对话（增强版 - 针对整个Excel文件）"""
         try:
-            # 构建数据摘要
-            data_summary = "当前Excel数据概况：\n"
+            # 构建整个Excel文件的完整概况
+            data_summary = "完整Excel文件数据概况：\n"
+            
+            # 添加第二个tab的Excel智能结构分析结果（重要！）
+            if hasattr(st.session_state, 'quick_excel_analysis') and st.session_state.quick_excel_analysis:
+                data_summary += f"\n📋 **Excel智能结构分析结果**（来自第二个tab）：\n"
+                data_summary += f"```\n{st.session_state.quick_excel_analysis}\n```\n\n"
+                data_summary += "⚠️ **重要**：这是对整个Excel文件的智能分析，包含了复杂表格识别、字段关系分析等信息。\n\n"
+                data_summary += "---\n\n"
+            
+            # 遍历所有工作表，提供详细信息
+            data_summary += f"📈 **所有工作表详细信息**（共{len(excel_data)}个工作表）：\n\n"
             for sheet_name, df in excel_data.items():
-                data_summary += f"- {sheet_name}: {len(df)}行 × {len(df.columns)}列\n"
-                data_summary += f"  字段: {', '.join(df.columns.tolist()[:10])}\n"
-                if len(df.columns) > 10:
-                    data_summary += f"  (还有{len(df.columns)-10}个字段...)\n"
+                data_summary += f"### 【工作表: {sheet_name}】\n"
+                data_summary += f"- **数据规模**: {len(df)}行 × {len(df.columns)}列\n"
+                
+                # 完整字段列表和详细信息
+                if len(df.columns) > 0:
+                    data_summary += f"- **完整字段列表** ({len(df.columns)}个): {df.columns.tolist()}\n"
+                    
+                    # 字段详细分析
+                    if len(df) > 0:
+                        data_summary += f"- **字段详细信息**:\n"
+                        for col in df.columns:
+                            dtype = str(df[col].dtype)
+                            non_null_count = df[col].count()
+                            unique_count = df[col].nunique()
+                            
+                            # 示例值（取前3个非空值）
+                            sample_values = df[col].dropna().head(3).tolist()
+                            sample_str = ', '.join([f'"{v}"' for v in sample_values])
+                            
+                            data_summary += f"  • `{col}` ({dtype}): {non_null_count}/{len(df)}非空, {unique_count}唯一值, 示例: {sample_str}\n"
+                    else:
+                        data_summary += f"- **注意**: 该工作表当前无数据行，但字段结构完整\n"
+                    
+                    # 前5行数据样例
+                    if len(df) > 0:
+                        data_summary += f"- **数据样例（前5行）**:\n"
+                        sample_df = df.head(5)
+                        for i, (_, row) in enumerate(sample_df.iterrows(), 1):
+                            row_data = {col: row[col] for col in df.columns[:5]}  # 只显示前5列避免过长
+                            data_summary += f"  第{i}行: {row_data}\n"
+                        if len(df.columns) > 5:
+                            data_summary += f"  （还有{len(df.columns)-5}个字段未显示）\n"
+                else:
+                    data_summary += f"- **警告**: 该工作表没有任何字段！\n"
+                
+                data_summary += "\n"
             
             prompt = f"""
-你是一位专业的数据分析师。基于以下Excel数据信息回答用户问题：
+你是一位专业的数据分析师，特别擅长处理复杂Excel表格结构和多工作表分析。基于以下完整Excel文件信息回答用户问题：
 
 {data_summary}
 
@@ -653,7 +695,21 @@ class EnhancedAIAnalyzer:
 
 用户问题：{message}
 
-请提供专业、具体的分析建议，用中文回答。
+**重要分析要求**：
+1. **全局视角**：这是对整个Excel文件（所有工作表）的分析，不仅仅是单个工作表
+2. **结构分析优先**：充分利用第二个tab的Excel智能结构分析结果，理解复杂表格的特性
+3. **跨表关联分析**：如果多个工作表存在关联关系，请识别并说明
+4. **智能字段匹配**：基于语义而非硬编码进行字段识别和匹配
+5. **复杂表格处理**：对于合并单元格、多行表头等复杂结构，提供专业的处理策略
+6. **数据完整性考虑**：结合所有工作表的数据情况给出综合建议
+
+**具体分析方向**：
+- 跨工作表的数据关联和整合可能性
+- 基于完整字段结构的深度业务分析
+- 结合Excel结构分析的数据处理建议  
+- 多维度、多层次的分析视角
+
+请提供专业、全面、具有可操作性的分析建议，体现对整个Excel文件的深度理解。
 """
             
             response = self.client.chat.completions.create(
@@ -671,7 +727,7 @@ class EnhancedAIAnalyzer:
         except Exception as e:
             return f"❌ AI对话出错: {str(e)}"
     
-    def analyze_data_request(self, request: str, excel_data: Dict[str, pd.DataFrame], excel_filename: str) -> Dict:
+    def analyze_data_request(self, request: str, excel_data: Dict[str, pd.DataFrame], excel_filename: str, current_sheet: str = None) -> Dict:
         """分析用户数据请求，判断是否需要生成Python代码，并返回合适的响应
         
         参数:
@@ -688,109 +744,193 @@ class EnhancedAIAnalyzer:
         }
         """
         try:
-            # 构建增强的数据摘要
+            # 构建增强的数据摘要 - 包含完整的Excel结构分析结果
             data_summary = "当前Excel数据完整概况：\n"
+            
+            # 添加第二个tab的Excel结构分析结果（重要！）
+            if hasattr(st.session_state, 'quick_excel_analysis') and st.session_state.quick_excel_analysis:
+                data_summary += f"\n📋 **Excel智能结构分析结果**（来自第二个tab的深度分析）：\n"
+                data_summary += f"```\n{st.session_state.quick_excel_analysis}\n```\n\n"
+                data_summary += "⚠️ **重要提示**：上述结构分析包含了对复杂表格的智能识别，包括:\n"
+                data_summary += "- 是否为标准二维表格还是存在合并单元格的复杂表格\n"
+                data_summary += "- 表头位置的智能识别（可能在第2行、第3行等非首行位置）\n"  
+                data_summary += "- 字段间的层级关系和递进逻辑\n"
+                data_summary += "- 筛选项字段的自动识别（≤10个唯一值显示全部可选值）\n"
+                data_summary += "- 请结合此结构分析来智能判断字段提取策略和数据处理方法\n\n"
+                data_summary += "---\n\n"
+            
+            # 为AI提供所有工作表的完整信息（包括变量名映射）
+            sheet_variable_mapping = {}
+            
             for sheet_name, df in excel_data.items():
-                data_summary += f"\n【工作表: {sheet_name}】\n"
+                # 生成安全的变量名
+                safe_name = sheet_name.replace(' ', '_').replace('-', '_').replace('.', '_').replace('(', '_').replace(')', '_').replace('/', '_').replace('\\', '_')
+                safe_name = ''.join(c for c in safe_name if c.isalnum() or c == '_')
+                sheet_variable_mapping[sheet_name] = f"df_{safe_name}"
+                
+                data_summary += f"\n📋 【工作表: {sheet_name}】(变量名: df_{safe_name})\n"
                 data_summary += f"- 数据规模: {len(df)}行 × {len(df.columns)}列\n"
                 
                 # 显示所有字段名（重要！）
                 if len(df.columns) > 0:
                     data_summary += f"- 完整字段列表({len(df.columns)}个字段): {df.columns.tolist()}\n"
                     
-                    # 添加详细字段信息
-                    data_summary += "- 字段详细信息:\n"
+                    # 添加字段类型信息
+                    data_summary += "- 字段类型信息:\n"
                     for i, col in enumerate(df.columns, 1):
                         dtype = str(df[col].dtype)
                         non_null_count = df[col].count() if not df.empty else 0
-                        data_summary += f"  {i}. '{col}' - 类型: {dtype}, 非空值: {non_null_count}/{len(df)}\n"
+                        unique_count = df[col].nunique() if not df.empty else 0
+                        data_summary += f"  {i}. '{col}' - 类型: {dtype}, 非空: {non_null_count}/{len(df)}, 唯一值: {unique_count}\n"
                 else:
                     data_summary += "- 警告: 该工作表没有任何字段！\n"
                 
-                # 增强的数据样例显示
+                # 显示前5行完整数据（关键！）
                 if not df.empty and len(df.columns) > 0:
-                    data_summary += "- 数据样例（前5行）:\n"
+                    data_summary += f"- 📊 前5行完整数据:\n"
                     try:
-                        # 显示所有字段的前5行数据
                         sample_df = df.head(5)
-                        sample_str = sample_df.to_string(max_cols=None, max_rows=5)
+                        sample_str = sample_df.to_string(max_cols=None, max_rows=5, width=None)
                         data_summary += f"```\n{sample_str}\n```\n"
                     except Exception as e:
-                        data_summary += f"  (数据样例显示失败: {str(e)})\n"
+                        data_summary += f"  (数据显示失败: {str(e)})\n"
                         
-                    # 添加数据统计信息
-                    data_summary += "- 数据统计概览:\n"
+                    # 关键字段的示例值
+                    data_summary += "- 🔍 关键字段示例值:\n"
                     try:
-                        for col in df.columns:
-                            unique_count = df[col].nunique() if not df.empty else 0
+                        for col in df.columns[:10]:  # 只显示前10个字段的示例
                             sample_values = df[col].dropna().head(3).tolist() if not df.empty else []
-                            sample_str = ", ".join([f"'{v}'" for v in sample_values]) if sample_values else "无"
-                            data_summary += f"  '{col}': {unique_count}个唯一值, 样例值: {sample_str}\n"
+                            if sample_values:
+                                sample_str = ", ".join([f"'{v}'" for v in sample_values])
+                                data_summary += f"  • '{col}': {sample_str}\n"
                     except Exception as e:
-                        data_summary += f"  (统计信息生成失败: {str(e)})\n"
+                        data_summary += f"  (示例值生成失败: {str(e)})\n"
                 else:
                     data_summary += "- 数据状态: 该工作表为空，没有数据行\n"
                     if len(df.columns) > 0:
                         data_summary += "- 即使数据为空，仍可根据字段名进行结构分析\n"
             
-            prompt = f"""
-你是一位数据科学家，擅长分析用户的数据请求并提供合适的解决方案。请分析以下用户请求，并决定是否需要编写Python代码来完成请求。
+            # 添加工作表变量映射信息，供AI代码生成使用
+            data_summary += f"\n🔗 **AI代码生成参考 - 工作表变量映射**:\n"
+            for sheet_name, var_name in sheet_variable_mapping.items():
+                data_summary += f"- '{sheet_name}' → {var_name}\n"
+            # 移除当前数据表的引用，专注于全Excel分析
+            data_summary += f"- 重点：使用find_target_sheet_for_analysis()智能选择最佳工作表进行分析\n"
+            
+            # 检查是否有字段质量问题
+            field_quality_warnings = ""
+            if hasattr(st.session_state, 'quick_excel_analysis') and st.session_state.quick_excel_analysis:
+                analysis_text = st.session_state.quick_excel_analysis
+                if any(keyword in analysis_text for keyword in ['置信度:', '建议的真实字段名', '字段名识别预警', '❓', '⚠️']):
+                    field_quality_warnings = f"""
 
-Excel文件: {excel_filename}
-{data_summary}
-
-用户请求: {request}
-
-重要提示：
-- 字段名称是动态的，请根据上述数据摘要中的实际字段来分析
-- 不要硬编码字段名，而是根据用户的语义需求智能匹配相关字段
-- 例如：用户说"销售额"，可能对应字段"销售金额"、"销售价格"、"金额"、"执行价格"等
-- 例如：用户说"客户"，可能对应字段"客户名称"、"客户PO号"、"客户"、"用户名"等
-- 即使数据为空（0行），也要根据字段名称进行智能分析和建议
-- 如果数据为空，应该：
-  1. 分析字段名称的含义和用途
-  2. 解释这些字段可以支持什么样的分析
-  3. 提供数据填充建议
-  4. 说明预期的分析结果
-- 使用字段搜索方法：根据关键词匹配相关字段，而不是硬编码字段名
-- 可用的辅助函数：
-  * safe_column_access(df, column_name) - 安全访问列
-  * check_columns_exist(df, columns) - 检查多个列是否存在
-  * find_columns_by_keywords(df, keywords) - 根据关键词搜索字段
-- 预定义变量：available_columns, required_columns, missing_columns, existing_cols, missing_cols
-
-请分析这个请求并提供以下内容:
-1. 判断是否需要生成Python代码来回答用户的请求（是/否）
-2. 如果需要代码，请提供符合以下规则的Python代码:
-   - 代码应当清晰、高效，并包含适当的注释
-   - 使用变量名"current_df"来表示用户当前正在查看的数据框
-   - 代码执行后应该生成明确的结果数据
-   - 避免使用print语句，而是将结果保存到变量中
-   - 如果需要可视化，使用plotly生成图表并保存到变量
-   - 编写代码时请遵循以下模式：
-     1. 获取所有字段：all_columns = current_df.columns.tolist()
-     2. 根据用户需求搜索相关字段，例如：
-        - 销售相关：find_columns_by_keywords(current_df, ['销售', '金额', '价格', '执行价格'])
-        - 客户相关：find_columns_by_keywords(current_df, ['客户', '用户', '名称', 'PO'])
-     3. 检查数据情况：
-        - 如果数据为空（len(current_df) == 0），说明数据结构和字段意义
-        - 如果找到字段但数据为空，解释字段用途和分析潜力
-        - 如果有数据，则进行具体分析
-     4. 将最终结果存储在 result 变量中，包含分析结果或结构说明
-3. 对数据进行深入分析，找出潜在的业务机会或洞察
-4. 提供数据可视化的建议（如适用）
-
-请以JSON格式返回你的分析结果，包含以下字段:
-- needs_code: 布尔值，表示是否需要生成代码
-- code: 字符串，生成的Python代码（如果needs_code为true）
-- analysis: 字符串，对数据的分析结果和洞察
-- visualization_suggestion: 字符串，可视化建议（如适用）
+⚠️ **字段识别质量预警** ⚠️：
+根据Excel智能结构分析，发现以下字段质量问题：
+- 部分字段名的识别置信度较低
+- 可能存在字段名不准确的情况（如合并单元格导致的位置偏移）
+- 建议在代码中使用语义化字段匹配而非直接使用字段名
+- 强烈建议使用 find_columns_by_keywords() 函数进行智能字段搜索
+- 对关键分析字段进行数据内容验证，确保字段含义正确
 """
+
+            # 构建prompt - 避免f-string中的格式化问题
+            prompt_parts = [
+                "你是一位数据科学家，擅长分析用户的数据请求并提供合适的解决方案。请分析以下用户请求，并决定是否需要编写Python代码来完成请求。",
+                "",
+                f"Excel文件: {excel_filename}",
+                data_summary,
+                field_quality_warnings,
+                "",
+                f"用户请求: {request}",
+                ""
+            ]
+            
+            # 添加分析原则部分
+            prompt_parts.extend([
+
+                "🧠 **智能分析核心原则**：",
+                "",
+                "1. **直接分析模式**（重要！）：",
+                "   - 你已经获得了所有工作表的完整字段列表和前5行数据",
+                "   - 你已经获得了Excel智能结构分析结果，明确指出了哪个表头在第几行，数据从第几行开始",
+                "   - **不要生成探索性代码**，直接基于已知信息生成最终分析代码",
+                "   - 从字段列表中直接选择目标字段，从工作表列表中直接选择目标工作表",
+                "",
+                "2. **智能数据起始行判断**：",
+                "   - **关键**：根据提供的前5行数据，智能判断真正的数据从第几行开始",
+                "   - 识别带下标的字段名模式（如字段名包含_1、_2、_3等），这些通常不是真正的字段名",
+                "   - 如果某行大部分字段都是带下标的（如 基本信息_1, 基本信息_2），跳过这一行",
+                "   - 如果连续多行都有大量下标字段，继续跳过直到找到真正的字段行",
+                "   - 智能识别哪一行开始是真正的数据内容，而不是字段名或序号行",
+                "",
+                "3. **可用数据资源和智能函数**：",
+                "   - excel_data: 包含所有工作表的完整字典，直接使用 excel_data[工作表名]",
+                "   - 每个工作表的字段列表已完整提供",
+                "   - 每个工作表的前5行数据已完整提供，足以判断数据结构",
+                "   - smart_detect_data_start_row(df) - 智能检测真正的数据起始行，跳过带下标的字段行",
+                "   - apply_smart_data_structure(df) - 一键智能应用数据结构调整，自动处理表头和数据",
+                "",
+                "4. **代码生成要求**：",
+                "   - 直接使用已知的工作表名称：df = excel_data[确切的工作表名]",
+                "   - **强制使用字段验证**：始终使用 safe_find_columns_by_keywords() 函数来查找字段，避免直接使用字段名",
+                "   - **禁止直接访问字段**：不要使用 df[字段名]，必须先验证字段存在性",
+                "   - 如果需要跳过表头行，直接处理：df = df.iloc[n:] ",
+                "   - 避免使用find_target_sheet_for_analysis()等探索函数，除非确实不确定",
+                "   - 生成的代码应该是确定性的、直接的分析代码",
+                "",
+                "5. **字段安全访问模式**（重要！）：",
+                "   代码示例：",
+                "   # 正确的字段访问方式 - 必须使用关键词搜索",
+                "   sales_col = safe_find_columns_by_keywords(df, ['销售', '金额', '收入'])",
+                "   if sales_col:",
+                "       df[sales_col] = pd.to_numeric(df[sales_col], errors='coerce')",
+                "   ",
+                "   # 错误的访问方式 - 禁止直接使用字段名",
+                "   # df[字段名] = ... # 这会导致KeyError"
+            ])
+            
+            # 添加请求分析部分
+            prompt_parts.extend([
+
+                "",
+                "请分析这个请求并提供以下内容:",
+                "1. 判断是否需要生成Python代码来回答用户的请求（是/否）",
+                "2. 如果需要代码，请提供符合以下规则的Python代码:",
+                "   - 代码应当清晰、高效，并包含适当的注释",
+                "   - **直接分析模式**：基于已提供的完整信息直接生成最终分析代码",
+                "   - 从提供的工作表列表中直接选择目标工作表名称",
+                "   - **必须使用safe_find_columns_by_keywords()函数进行字段查找，禁止直接使用字段名**",
+                "   - 根据Excel结构分析结果正确处理表头位置和数据起始行",
+                "   - 代码执行后应该生成明确的结果数据",
+                "   - 避免使用print语句，而是将结果保存到变量中",
+                "   - 如果需要可视化，使用plotly生成图表并保存到变量",
+                "3. 对数据进行深入分析，找出潜在的业务机会或洞察",
+                "4. 提供数据可视化的建议（如适用）",
+                "",
+                "**🚨 重要：字段安全访问规则 🚨**",
+                "- **禁止直接使用字段名**：不要使用 df[字段名]，这会导致KeyError",
+                "- **必须使用安全查找**：使用 safe_find_columns_by_keywords(df, ['关键词1', '关键词2']) 来查找字段",
+                "",
+                "**🚨 关键JSON格式要求 🚨**：",
+                "你的回答必须是严格的JSON格式，包含以下4个必需字段：",
+                "- needs_code: 布尔值，表示是否需要生成代码",
+                "- code: 字符串，生成的Python代码（如果needs_code为true）",
+                "- analysis: 字符串，对数据的分析结果和洞察",
+                "- visualization_suggestion: 字符串，可视化建议（如适用）",
+                "",
+                "JSON格式要求：",
+                "- 所有字符串值必须正确转义，代码中的换行使用\\n，引号使用\\\"",
+                "- 不能在JSON外部添加任何文字",
+                "- 必须包含4个字段：needs_code, code, analysis, visualization_suggestion"
+            ])
+            
+            # 将所有部分组合成最终的prompt
+            prompt = "\n".join(prompt_parts)
             
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是一位专业的数据科学家，擅长理解用户需求并提供准确、实用的Python代码和数据分析。你的回答应始终符合JSON格式，包含needs_code, code, analysis, visualization_suggestion字段。"},
+                    {"role": "system", "content": "你是一位专业的数据科学家，擅长理解用户需求并提供准确、实用的Python代码和数据分析。你特别精通处理复杂Excel表格结构，能够智能识别表头位置、字段关系和数据模式。你必须严格按照JSON格式返回结果，包含needs_code, code, analysis, visualization_suggestion四个字段。绝对不能在JSON外部添加任何文字。代码中禁止直接使用字段名，必须使用safe_find_columns_by_keywords函数进行字段查找。"},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.2,
@@ -798,7 +938,52 @@ Excel文件: {excel_filename}
                 response_format={"type": "json_object"}
             )
             
-            result = json.loads(response.choices[0].message.content)
+            # 强化的JSON解析，包含错误恢复机制
+            try:
+                response_content = response.choices[0].message.content.strip()
+                if not response_content:
+                    raise ValueError("AI返回了空响应")
+                
+                # 尝试解析JSON
+                result = json.loads(response_content)
+                
+            except json.JSONDecodeError as json_error:
+                # JSON解析失败，尝试提取有用信息
+                print(f"JSON解析失败: {json_error}")
+                print(f"原始响应: {response_content}")
+                
+                # 尝试从响应中提取关键信息
+                if response_content and len(response_content) > 50:
+                    # 检查是否包含代码块
+                    needs_code = 'python' in response_content.lower() or 'df' in response_content
+                    
+                    # 尝试提取代码
+                    code = ""
+                    if '```python' in response_content:
+                        start = response_content.find('```python') + 9
+                        end = response_content.find('```', start)
+                        if end != -1:
+                            code = response_content[start:end].strip()
+                    elif 'df =' in response_content or 'excel_data' in response_content:
+                        # 尝试简单的代码提取
+                        lines = response_content.split('\n')
+                        code_lines = [line for line in lines if any(keyword in line for keyword in ['df =', 'excel_data', 'result =', 'import'])]
+                        code = '\n'.join(code_lines) if code_lines else ""
+                    
+                    return {
+                        'needs_code': needs_code,
+                        'code': code,
+                        'analysis': f"AI分析结果（从异常响应中提取）：\n\n{response_content}\n\n注：原始响应格式异常，已尝试提取关键信息",
+                        'visualization_suggestion': "建议根据分析结果选择合适的图表类型"
+                    }
+                else:
+                    # 响应太短或无效，返回错误信息
+                    return {
+                        'needs_code': False,
+                        'code': "",
+                        'analysis': f"AI响应格式错误，无法解析JSON: {str(json_error)}\n原始响应长度: {len(response_content)}字符\n请重新尝试您的请求。",
+                        'visualization_suggestion': ""
+                    }
             
             # 确保所有必需的字段都存在
             if 'needs_code' not in result:
@@ -839,11 +1024,13 @@ Excel文件: {excel_filename}
         }
         """
         try:
-            # 第一步：分析用户请求
+            # 第一步：分析用户请求（包含Excel结构分析结果）
             if progress_callback:
                 progress_callback("initial_analysis", "正在分析用户需求并生成分析代码...")
             
-            initial_analysis = self.analyze_data_request(request, excel_data, excel_filename)
+            # 确保Excel结构分析结果被包含在分析中
+            # analyze_data_request方法已经自动包含st.session_state.quick_excel_analysis
+            initial_analysis = self.analyze_data_request(request, excel_data, excel_filename, current_sheet)
             
             if not initial_analysis['needs_code']:
                 # 如果不需要代码，直接返回分析结果
@@ -862,15 +1049,12 @@ Excel文件: {excel_filename}
             if progress_callback:
                 progress_callback("code_execution", "正在执行数据分析代码...")
             try:
-                current_df = excel_data[current_sheet]
-                
-                # 准备执行环境
+                # 准备执行环境 - 全Excel多工作表分析模式
                 exec_globals = {
                     'pd': pd,
                     'np': np,
                     'px': px,
                     'go': go,
-                    'current_df': current_df.copy(),
                     'datetime': datetime,
                     're': re,
                     # 预定义常用变量以避免NameError
@@ -880,8 +1064,6 @@ Excel文件: {excel_filename}
                     'output': None,
                     'final_result': None,
                     'answer': None,
-                    'available_columns': current_df.columns.tolist(),
-                    'all_columns': current_df.columns.tolist(),  # 添加这个常用变量
                     'required_columns': [],
                     'missing_columns': [],
                     'existing_cols': [],
@@ -892,10 +1074,44 @@ Excel文件: {excel_filename}
                     'customer_keywords': ['客户', '用户', '名称', '公司', '企业']
                 }
                 
-                # 添加所有工作表数据
+                # 添加所有工作表数据（核心功能！）
+                exec_globals['excel_data'] = excel_data  # 完整的Excel数据字典
                 for sheet_name, df in excel_data.items():
-                    safe_name = sheet_name.replace(' ', '_').replace('-', '_').replace('.', '_')
-                    exec_globals[f'df_{safe_name}'] = df.copy()
+                    # 生成安全的变量名
+                    safe_name = sheet_name.replace(' ', '_').replace('-', '_').replace('.', '_').replace('(', '_').replace(')', '_').replace('/', '_').replace('\\', '_')
+                    safe_name = ''.join(c for c in safe_name if c.isalnum() or c == '_')
+                    if safe_name and safe_name[0].isdigit():
+                        safe_name = 'df_' + safe_name
+                    elif not safe_name.startswith('df_'):
+                        safe_name = 'df_' + safe_name
+                    
+                    exec_globals[safe_name] = df.copy()
+                    
+                # 添加工作表名称列表供AI参考
+                exec_globals['sheet_names'] = list(excel_data.keys())
+                exec_globals['total_sheets'] = len(excel_data)
+                
+                # 添加Excel文件路径信息，支持复杂表格处理
+                if hasattr(st.session_state, 'current_file_path') and st.session_state.current_file_path:
+                    exec_globals['excel_file_path'] = str(st.session_state.current_file_path)
+                    exec_globals['excel_filename'] = excel_filename
+                else:
+                    exec_globals['excel_file_path'] = None
+                    exec_globals['excel_filename'] = excel_filename
+                
+                # 添加Excel结构分析结果，供代码参考
+                if hasattr(st.session_state, 'quick_excel_analysis') and st.session_state.quick_excel_analysis:
+                    exec_globals['excel_structure_analysis'] = st.session_state.quick_excel_analysis
+                else:
+                    exec_globals['excel_structure_analysis'] = "无结构分析数据"
+                
+                # 导入openpyxl，用于复杂表格处理
+                import openpyxl
+                exec_globals['openpyxl'] = openpyxl
+                
+                # 添加traceback模块以避免执行时的NameError
+                import traceback as tb_module
+                exec_globals['traceback'] = tb_module
                 
                 # 添加一些常用的辅助函数
                 def safe_column_access(df, column_name):
@@ -912,17 +1128,305 @@ Excel文件: {excel_filename}
                     return existing_cols, missing_cols
                 
                 def find_columns_by_keywords(df, keywords):
-                    """根据关键词搜索匹配的字段"""
+                    """根据关键词搜索匹配的字段（增强版 - 支持模糊匹配）"""
                     matches = []
-                    for col in df.columns:
+                    col_list = df.columns.tolist()
+                    
+                    for col in col_list:
+                        col_str = str(col).lower()
                         for keyword in keywords:
-                            if keyword in str(col):
-                                matches.append(col)
-                    return list(set(matches))
+                            keyword_str = str(keyword).lower()
+                            # 精确匹配 或 包含匹配 或 模糊匹配
+                            if (keyword_str == col_str or 
+                                keyword_str in col_str or 
+                                col_str in keyword_str):
+                                if col not in matches:
+                                    matches.append(col)
+                                break
+                    return matches
+                
+                def safe_find_columns_by_keywords(df, keywords, default_column=None):
+                    """安全版本的字段搜索，如果没找到匹配项会返回默认值或第一个字段"""
+                    matches = find_columns_by_keywords(df, keywords)
+                    if matches:
+                        return matches[0]  # 返回第一个匹配的字段
+                    elif default_column and default_column in df.columns:
+                        return default_column  # 返回指定的默认字段
+                    elif len(df.columns) > 0:
+                        return df.columns[0]  # 返回第一个字段作为fallback
+                    else:
+                        return None  # DataFrame没有任何字段
+                
+                def smart_field_analysis(df):
+                    """智能字段分析 - 结合Excel结构分析进行字段语义理解"""
+                    analysis_result = {
+                        'total_fields': len(df.columns),
+                        'field_names': df.columns.tolist(),
+                        'field_types': {},
+                        'potential_keys': [],
+                        'potential_metrics': [],
+                        'potential_categories': [],
+                        'field_quality_issues': [],
+                        'structure_warnings': []
+                    }
+                    
+                    # 检查Excel结构分析结果，提取字段质量信息
+                    if hasattr(st.session_state, 'quick_excel_analysis') and st.session_state.quick_excel_analysis:
+                        analysis_text = st.session_state.quick_excel_analysis
+                        
+                        # 检测字段名质量问题
+                        if '置信度:' in analysis_text:
+                            if '⚠️' in analysis_text:
+                                analysis_result['field_quality_issues'].append("检测到中等置信度的字段名识别问题")
+                            if '❓' in analysis_text:
+                                analysis_result['field_quality_issues'].append("检测到低置信度的字段名识别问题")
+                        
+                        if '建议的真实字段名' in analysis_text:
+                            analysis_result['field_quality_issues'].append("存在字段名不准确的情况，建议参考AI建议的替代字段名")
+                        
+                        if '合并单元格' in analysis_text and '复杂表格' in analysis_text:
+                            analysis_result['structure_warnings'].append("表格包含合并单元格，字段位置和含义可能需要特殊处理")
+                        
+                        if '字段名识别预警' in analysis_text:
+                            analysis_result['structure_warnings'].append("Excel结构分析发现字段识别异常，建议人工确认字段含义")
+                    
+                    if df.empty:
+                        analysis_result.update({
+                            'analysis': '数据为空，仅能进行字段名分析',
+                            'suggestions': '建议填充数据后进行深度分析'
+                        })
+                        return analysis_result
+                    
+                    for col in df.columns:
+                        col_lower = str(col).lower()
+                        dtype = str(df[col].dtype)
+                        unique_count = df[col].nunique()
+                        analysis_result['field_types'][col] = dtype
+                        
+                        # 识别潜在的主键字段
+                        if unique_count == len(df) and ('id' in col_lower or '编号' in col_lower or 'code' in col_lower):
+                            analysis_result['potential_keys'].append(col)
+                        
+                        # 识别潜在的度量字段
+                        if dtype in ['int64', 'float64'] and any(keyword in col_lower for keyword in ['金额', '价格', '数量', '成本', '收入', '费用', '销售', '利润']):
+                            analysis_result['potential_metrics'].append(col)
+                        
+                        # 识别潜在的分类字段
+                        if unique_count <= 50 and any(keyword in col_lower for keyword in ['类型', '类别', '状态', '级别', '部门', '区域', '渠道']):
+                            analysis_result['potential_categories'].append(col)
+                    
+                    return analysis_result
+                
+                def safe_list_access(lst, index, default=None):
+                    """安全访问列表元素，避免索引越界"""
+                    try:
+                        if isinstance(lst, (list, tuple)) and 0 <= index < len(lst):
+                            return lst[index]
+                        else:
+                            return default
+                    except (IndexError, TypeError):
+                        return default
+                
+                def safe_dataframe_access(df, index=0, column=None):
+                    """安全访问DataFrame的行或单元格"""
+                    try:
+                        if len(df) == 0:
+                            return None
+                        if column is not None:
+                            if column in df.columns and index < len(df):
+                                return df.iloc[index][column]
+                            else:
+                                return None
+                        else:
+                            if index < len(df):
+                                return df.iloc[index]
+                            else:
+                                return None
+                    except (IndexError, KeyError, TypeError):
+                        return None
+                
+                def validate_list_operation(lst, operation_desc="列表操作"):
+                    """验证列表操作的安全性"""
+                    if not isinstance(lst, (list, tuple)):
+                        return False, f"{operation_desc}: 不是有效的列表或元组"
+                    if len(lst) == 0:
+                        return False, f"{operation_desc}: 列表为空"
+                    return True, f"{operation_desc}: 验证通过"
+                
+                def safe_dict_key(value):
+                    """将值转换为可以安全用作字典键的类型"""
+                    if isinstance(value, (dict, list, set)):
+                        return str(value)  # 转换为字符串
+                    elif hasattr(value, '__iter__') and not isinstance(value, (str, bytes)):
+                        return str(value)  # 其他可迭代对象转换为字符串
+                    else:
+                        return value  # 已经是可哈希类型
+                
+                def safe_groupby(df, by_column):
+                    """安全的DataFrame分组操作"""
+                    try:
+                        if by_column not in df.columns:
+                            return None
+                        # 确保分组列的值都是可哈希的
+                        df_copy = df.copy()
+                        df_copy[by_column] = df_copy[by_column].apply(safe_dict_key)
+                        return df_copy.groupby(by_column)
+                    except Exception as e:
+                        return None
+                
+                def smart_detect_data_start_row(df, max_check_rows=5):
+                    """智能检测数据的真正起始行，跳过带下标的字段名行"""
+                    if len(df) == 0:
+                        return 0, 1
+                    
+                    header_row = 0  # 真正的表头行
+                    data_start_row = 1  # 真正的数据起始行
+                    
+                    # 检查前几行，寻找带下标字段名的模式
+                    for i in range(min(max_check_rows, len(df))):
+                        try:
+                            row_values = df.iloc[i].astype(str).tolist()
+                            
+                            # 统计带下标的字段数量（如 _1, _2, _3 等）
+                            subscript_count = 0
+                            for val in row_values:
+                                val = str(val).strip()
+                                # 检查是否以下标结尾
+                                if '_' in val:
+                                    for j in range(1, 20):  # 检查_1到_19
+                                        if val.endswith(f'_{j}'):
+                                            subscript_count += 1
+                                            break
+                            
+                            # 如果这一行超过30%的字段都带下标，认为这不是真正的表头
+                            if len(row_values) > 0 and subscript_count > len(row_values) * 0.3:
+                                header_row = i + 1  # 下一行可能是真正的表头
+                                data_start_row = header_row + 1
+                                continue
+                            
+                            # 找到了没有大量下标的行，停止搜索
+                            if subscript_count <= len(row_values) * 0.3:
+                                header_row = i
+                                data_start_row = i + 1
+                                break
+                                
+                        except Exception:
+                            continue
+                    
+                    # 确保不超出数据范围
+                    header_row = min(header_row, len(df) - 1)
+                    data_start_row = min(data_start_row, len(df))
+                    
+                    return header_row, data_start_row
+                
+                def apply_smart_data_structure(df):
+                    """应用智能数据结构检测，返回处理后的DataFrame"""
+                    if len(df) == 0:
+                        return df
+                    
+                    try:
+                        header_row, data_start_row = smart_detect_data_start_row(df)
+                        
+                        # 如果检测到需要调整结构
+                        if header_row > 0 or data_start_row > 1:
+                            # 设置正确的列名
+                            if header_row < len(df):
+                                new_columns = df.iloc[header_row].astype(str).tolist()
+                                # 清理列名，去掉可能的nan或空值
+                                new_columns = [col if col not in ['nan', 'None', ''] else f'Column_{i}' 
+                                             for i, col in enumerate(new_columns)]
+                                df.columns = new_columns
+                            
+                            # 获取数据部分
+                            if data_start_row < len(df):
+                                df = df.iloc[data_start_row:].reset_index(drop=True)
+                        
+                        return df
+                    except Exception as e:
+                        # 如果智能检测失败，返回原始DataFrame
+                        return df
+                
+                def analyze_merged_cell_fields(df):
+                    """分析合并单元格拆分后的字段模式"""
+                    field_groups = {}
+                    single_fields = []
+                    
+                    for col in df.columns:
+                        col_str = str(col)
+                        if '_' in col_str and not col_str.startswith('df_'):
+                            # 可能是合并单元格拆分的字段
+                            parts = col_str.split('_')
+                            if len(parts) >= 2 and parts[-1].isdigit():
+                                base_name = '_'.join(parts[:-1])
+                                if base_name not in field_groups:
+                                    field_groups[base_name] = []
+                                field_groups[base_name].append(col)
+                            else:
+                                single_fields.append(col)
+                        else:
+                            single_fields.append(col)
+                    
+                    return {
+                        'grouped_fields': field_groups,  # 合并单元格拆分的字段组
+                        'single_fields': single_fields,  # 普通字段
+                        'all_base_names': list(field_groups.keys())  # 所有基础名称
+                    }
+                
+                def find_target_sheet_for_analysis(excel_data, keywords):
+                    """为全局分析找到包含目标字段的最佳工作表，直接返回工作表名称"""
+                    best_sheet = None
+                    best_score = 0
+                    
+                    for sheet_name, df in excel_data.items():
+                        score = 0
+                        
+                        # 直接字段匹配
+                        direct_matches = find_columns_by_keywords(df, keywords)
+                        if direct_matches:
+                            score += len(direct_matches) * 3
+                        
+                        # 合并单元格字段匹配
+                        merged_analysis = analyze_merged_cell_fields(df)
+                        for base_name in merged_analysis['all_base_names']:
+                            for keyword in keywords:
+                                if keyword.lower() in base_name.lower() or base_name.lower() in keyword.lower():
+                                    score += 2
+                        
+                        # 数据质量评分
+                        if len(df) > 0:
+                            score += min(len(df) * 0.01, 5)
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_sheet = sheet_name
+                    
+                    # 如果没有找到匹配的工作表，返回第一个非空工作表
+                    if best_sheet is None:
+                        for sheet_name, df in excel_data.items():
+                            if len(df) > 0:
+                                best_sheet = sheet_name
+                                break
+                    
+                    # 如果还是没有，返回任意一个工作表
+                    if best_sheet is None and excel_data:
+                        best_sheet = list(excel_data.keys())[0]
+                    
+                    return best_sheet
                 
                 exec_globals['safe_column_access'] = safe_column_access
                 exec_globals['check_columns_exist'] = check_columns_exist
                 exec_globals['find_columns_by_keywords'] = find_columns_by_keywords
+                exec_globals['safe_find_columns_by_keywords'] = safe_find_columns_by_keywords
+                exec_globals['smart_field_analysis'] = smart_field_analysis
+                exec_globals['safe_list_access'] = safe_list_access
+                exec_globals['safe_dataframe_access'] = safe_dataframe_access
+                exec_globals['validate_list_operation'] = validate_list_operation
+                exec_globals['safe_dict_key'] = safe_dict_key
+                exec_globals['safe_groupby'] = safe_groupby
+                exec_globals['smart_detect_data_start_row'] = smart_detect_data_start_row
+                exec_globals['apply_smart_data_structure'] = apply_smart_data_structure
+                exec_globals['analyze_merged_cell_fields'] = analyze_merged_cell_fields
+                exec_globals['find_target_sheet_for_analysis'] = find_target_sheet_for_analysis
                 
                 # 重定向输出以捕获结果
                 import sys
@@ -951,6 +1455,24 @@ Excel文件: {excel_filename}
                     error_msg += f"可用变量: {list(exec_globals.keys())}\n\n"
                     error_msg += f"生成的代码:\n{initial_analysis.get('code', 'N/A')}\n\n"
                     error_msg += f"错误详情:\n{error_details}"
+                elif "list index out of range" in str(code_error):
+                    error_msg = f"列表索引越界错误: {str(code_error)}\n\n"
+                    error_msg += f"这通常是由于以下原因之一:\n"
+                    error_msg += f"1. 尝试访问空列表的元素\n"
+                    error_msg += f"2. 列表长度小于预期的索引值\n"
+                    error_msg += f"3. 数据筛选后结果为空但代码仍尝试访问索引\n\n"
+                    error_msg += f"生成的代码:\n{initial_analysis.get('code', 'N/A')}\n\n"
+                    error_msg += f"错误详情:\n{error_details}\n\n"
+                    error_msg += f"建议: 请检查代码中的列表操作，确保在访问索引前验证列表长度。"
+                elif "unhashable type" in str(code_error):
+                    error_msg = f"数据类型错误: {str(code_error)}\n\n"
+                    error_msg += f"这个错误通常发生在以下情况:\n"
+                    error_msg += f"1. 尝试将字典(dict)或列表(list)作为另一个字典的键\n"
+                    error_msg += f"2. 尝试将不可哈希的对象添加到集合(set)中\n"
+                    error_msg += f"3. 在DataFrame操作中使用了错误的数据类型\n\n"
+                    error_msg += f"生成的代码:\n{initial_analysis.get('code', 'N/A')}\n\n"
+                    error_msg += f"错误详情:\n{error_details}\n\n"
+                    error_msg += f"建议: 检查代码中是否有dict或list被用作字典键，或检查DataFrame操作中的数据类型。"
                 else:
                     error_msg = f"代码执行失败: {str(code_error)}\n\n详细错误信息:\n{error_details}"
                 
@@ -1032,7 +1554,12 @@ Excel文件: {excel_filename}
                 'available_columns', 'all_columns', 'required_columns', 'missing_columns', 
                 'existing_cols', 'missing_cols', 'sales_cols', 'customer_cols',
                 'sales_keywords', 'customer_keywords',
-                'safe_column_access', 'check_columns_exist', 'find_columns_by_keywords'
+                'safe_column_access', 'check_columns_exist', 'find_columns_by_keywords', 'safe_find_columns_by_keywords',
+                'safe_dict_key', 'safe_groupby', 'safe_list_access', 'safe_dataframe_access',
+                'validate_list_operation', 'smart_detect_data_start_row', 'apply_smart_data_structure',
+                'analyze_merged_cell_fields', 'find_target_sheet_for_analysis',
+                'smart_field_analysis', 'excel_data', 'sheet_names', 'total_sheets',
+                'openpyxl', 'traceback', 'excel_file_path', 'excel_filename', 'excel_structure_analysis'
             ]
             
             for var_name, value in exec_globals.items():
@@ -1072,16 +1599,52 @@ Excel文件: {excel_filename}
     
     def _analyze_execution_results(self, original_request: str, execution_results: str, execution_output: str, 
                                  excel_data: Dict[str, pd.DataFrame], excel_filename: str, current_sheet: str) -> Dict:
-        """基于代码执行结果进行最终分析"""
+        """基于代码执行结果进行最终分析（增强版 - 包含完整原始数据框架信息）"""
         try:
-            # 构建分析提示词
+            # 构建完整的原始Excel数据框架信息
+            original_data_context = f"\n📊 **原始Excel完整数据框架信息**：\n"
+            original_data_context += f"Excel文件名: {excel_filename}\n"
+            original_data_context += f"当前分析工作表: {current_sheet}\n\n"
+            
+            # 添加第二个tab的Excel结构分析结果（关键信息！）
+            if hasattr(st.session_state, 'quick_excel_analysis') and st.session_state.quick_excel_analysis:
+                original_data_context += f"📋 **Excel智能结构分析结果**（来自第二个tab的深度分析）：\n"
+                original_data_context += f"```\n{st.session_state.quick_excel_analysis}\n```\n\n"
+            
+            # 添加所有工作表的详细字段信息
+            original_data_context += "📈 **所有工作表的完整字段框架**：\n"
+            for sheet_name, df in excel_data.items():
+                original_data_context += f"\n【工作表: {sheet_name}】({len(df)}行 × {len(df.columns)}列)\n"
+                
+                # 详细字段信息
+                original_data_context += f"字段列表: {', '.join(df.columns.tolist())}\n"
+                
+                # 字段类型和非空值统计
+                if len(df) > 0:
+                    original_data_context += f"字段详情:\n"
+                    for col in df.columns:
+                        dtype = str(df[col].dtype)
+                        non_null_count = df[col].count()
+                        unique_count = df[col].nunique()
+                        
+                        # 示例值（取前3个非空值）
+                        sample_values = df[col].dropna().head(3).tolist()
+                        sample_str = ', '.join([str(v) for v in sample_values])
+                        
+                        original_data_context += f"  • {col} ({dtype}): {non_null_count}/{len(df)}非空, {unique_count}唯一值, 示例: {sample_str}\n"
+                
+                # 数据样例（前3行）
+                if len(df) > 0:
+                    original_data_context += f"数据样例（前3行）:\n{df.head(3).to_string()}\n"
+                original_data_context += "\n"
+            
+            # 构建增强的分析提示词
             prompt = f"""
-作为一位资深的数据分析师，请基于以下信息为用户提供完整、深入的分析报告：
+作为一位资深的数据分析师，请基于以下完整信息为用户提供深入、综合的分析报告：
 
 **用户原始请求**: {original_request}
 
-**Excel文件**: {excel_filename}
-**当前分析的工作表**: {current_sheet}
+{original_data_context}
 
 **代码执行结果**:
 {execution_results}
@@ -1089,17 +1652,28 @@ Excel文件: {excel_filename}
 **执行过程输出**:
 {execution_output}
 
-**请提供以下分析**:
+**请基于原始数据框架和执行结果，提供以下深度分析**:
 
 1. **直接回答用户的问题** - 基于执行结果，明确回答用户的具体需求
 
-2. **数据洞察与发现** - 从结果中识别出的重要趋势、模式或异常
+2. **深度数据洞察** - 结合原始数据的完整框架信息，识别出的重要趋势、模式、异常或关联关系
+   - 分析结果在原始数据背景下的意义
+   - 结合其他字段的潜在关联分析
+   - 识别数据中可能存在的业务规律
 
-3. **业务建议** - 基于分析结果，提供具体的行动建议或关注重点
+3. **综合业务建议** - 基于分析结果和原始数据特征，提供具体的行动建议
+   - 结合数据质量情况的建议
+   - 基于字段关联的业务优化建议
+   - 数据驱动的决策支持
 
-4. **进一步分析方向** - 建议用户可以继续深入分析的方向
+4. **扩展分析方向** - 基于原始数据的丰富字段，建议用户可以继续深入的分析维度
+   - 推荐利用其他字段的分析角度
+   - 建议时间序列、分类、关联等多维分析
+   - 基于数据特征的高级分析建议
 
-请用中文回复，语言要专业但易懂，重点突出实际业务价值。
+⚠️ **重要**: 请充分利用原始数据的完整框架信息，不要仅仅基于执行结果的简化数据进行分析。要体现对整体数据结构和业务背景的深度理解。
+
+请用中文回复，语言要专业但易懂，重点突出实际业务价值和可操作性。
 """
 
             response = self.client.chat.completions.create(
@@ -1114,14 +1688,30 @@ Excel文件: {excel_filename}
             
             analysis_result = response.choices[0].message.content
             
-            # 生成可视化建议
+            # 生成增强的可视化建议（包含完整数据框架）
             viz_prompt = f"""
-基于以下分析结果和用户请求，提供具体的数据可视化建议：
+基于以下完整信息，提供专业的数据可视化建议：
 
-用户请求: {original_request}
-分析结果: {execution_results[:500]}...
+**用户请求**: {original_request}
 
-请推荐最适合的图表类型和可视化方案，说明为什么这些可视化方式能够最好地展示数据洞察。
+**原始数据框架概要**:
+{original_data_context[:1000]}...
+
+**分析执行结果**: 
+{execution_results[:800]}...
+
+**请提供综合的可视化建议**:
+
+1. **当前结果的最佳可视化** - 针对执行结果推荐最适合的图表类型
+
+2. **多维度可视化扩展** - 基于原始数据的丰富字段，推荐额外的可视化角度
+   - 结合其他字段的关联可视化
+   - 时间趋势、分布、比较等不同视角
+   - 交互式可视化的可能性
+
+3. **可视化实现建议** - 具体的图表制作建议和注意事项
+
+请说明每种可视化方式如何最好地展示数据洞察和业务价值。
 """
             
             viz_response = self.client.chat.completions.create(
@@ -2707,6 +3297,16 @@ def main():
                         if sheet_names:
                             st.session_state.current_sheet = sheet_names[0]
                         
+                        # 重置分析状态（重要！）
+                        if 'quick_excel_analysis' in st.session_state:
+                            del st.session_state.quick_excel_analysis
+                        if 'excel_analysis' in st.session_state:
+                            st.session_state.excel_analysis = ""
+                        if 'chat_history' in st.session_state:
+                            st.session_state.chat_history = []
+                        if 'data_chat_history' in st.session_state:
+                            st.session_state.data_chat_history = []
+                        
                         # 保存当前文件信息到session state
                         st.session_state.current_file_path = str(file_path)
                         st.session_state.current_file_name = uploaded_file.name
@@ -3433,6 +4033,9 @@ print("="*50)
                 with col_exec:
                     if st.button("▶️ 执行Excel代码", type="primary", use_container_width=True):
                         try:
+                            # 导入必要的模块到当前作用域
+                            import traceback
+                            
                             # 准备执行环境 - 包含原始Excel文件访问
                             exec_globals = {
                                 'pd': pd,
@@ -4108,47 +4711,64 @@ print("="*50)
         # Tab 5: AI数据对话
         with tab5:
             st.header("🧠 AI 数据对话")
-            st.info("💬 智能Agent自动分析您的数据请求，执行必要的代码并提供完整分析结果")
+            st.info("💬 基于整个Excel文件的智能对话分析 - 支持跨工作表的综合分析和复杂表格处理")
             
-            if st.session_state.current_sheet:
-                current_df = st.session_state.excel_data[st.session_state.current_sheet]
+            # 显示整个Excel文件的概览信息
+            if st.session_state.excel_data:
+                total_sheets = len(st.session_state.excel_data)
+                total_rows = sum(len(df) for df in st.session_state.excel_data.values())
+                total_columns = sum(len(df.columns) for df in st.session_state.excel_data.values())
+                
+                # 整体概览
+                st.markdown("### 📊 Excel文件完整概览")
+                col_overview1, col_overview2, col_overview3, col_overview4 = st.columns(4)
+                
+                with col_overview1:
+                    st.metric("工作表数量", total_sheets)
+                with col_overview2:
+                    st.metric("总数据行数", total_rows)
+                with col_overview3:
+                    st.metric("总字段数", total_columns)
+                with col_overview4:
+                    if hasattr(st.session_state, 'quick_excel_analysis') and st.session_state.quick_excel_analysis:
+                        st.metric("结构分析", "✅ 已完成")
+                    else:
+                        st.metric("结构分析", "⚠️ 未完成")
+                
+                # 使用当前选择的工作表作为主要分析对象，但基于整个文件进行分析
+                current_df = st.session_state.excel_data[st.session_state.current_sheet] if st.session_state.current_sheet else None
                 
                 # 初始化对话历史
                 if 'data_chat_history' not in st.session_state:
                     st.session_state.data_chat_history = []
                 
-                # 显示数据信息摘要
-                st.markdown("### 📊 当前数据")
-                col_info1, col_info2, col_info3, col_debug = st.columns([2, 2, 2, 1])
+                # 调试模式控制
+                debug_mode = st.checkbox("🔧 调试模式", value=False, help="显示代码执行过程")
                 
-                with col_info1:
-                    st.metric("工作表", st.session_state.current_sheet)
-                
-                with col_info2:
-                    st.metric("数据行数", len(current_df))
-                
-                with col_info3:
-                    st.metric("字段数量", len(current_df.columns))
-                
-                with col_debug:
-                    debug_mode = st.checkbox("🔧 调试模式", value=False, help="显示代码执行过程")
-                
-                # 字段信息
-                with st.expander("📝 数据字段信息", expanded=False):
-                    field_info = []
-                    for col in current_df.columns:
-                        dtype = str(current_df[col].dtype)
-                        non_null = current_df[col].count()
-                        total = len(current_df)
-                        field_info.append({
-                            "字段名": col,
-                            "数据类型": dtype,
-                            "非空值": f"{non_null}/{total}",
-                            "样例": str(current_df[col].iloc[0]) if not current_df[col].empty else "无"
-                        })
-                    
-                    field_df = pd.DataFrame(field_info)
-                    st.dataframe(field_df, use_container_width=True)
+                # 全Excel字段信息
+                with st.expander("📝 全Excel数据字段信息", expanded=False):
+                    for sheet_name, df in st.session_state.excel_data.items():
+                        st.markdown(f"**工作表: {sheet_name}** ({len(df)}行 × {len(df.columns)}列)")
+                        
+                        if len(df.columns) > 0:
+                            field_info = []
+                            for col in df.columns:
+                                dtype = str(df[col].dtype)
+                                non_null = df[col].count()
+                                total = len(df)
+                                sample_val = str(df[col].iloc[0]) if not df.empty and not df[col].empty else "无"
+                                field_info.append({
+                                    "字段名": col,
+                                    "数据类型": dtype,
+                                    "非空值": f"{non_null}/{total}",
+                                    "样例": sample_val
+                                })
+                            
+                            field_df = pd.DataFrame(field_info)
+                            st.dataframe(field_df, use_container_width=True, key=f"fields_{sheet_name}")
+                        else:
+                            st.write("该工作表无字段信息")
+                        st.markdown("---")
                 
                 # 聊天历史容器
                 st.markdown("### 💬 智能对话")
@@ -4241,6 +4861,28 @@ print("="*50)
                                 with log_container:
                                     st.write(f"🔧 调试: 用户请求='{user_input}'")
                                     st.write("🔧 调试: 开始调用intelligent_data_analysis...")
+                            
+                            # 检查Excel结构分析是否完成，如果没有完成则自动触发
+                            if not hasattr(st.session_state, 'quick_excel_analysis') or not st.session_state.quick_excel_analysis:
+                                with status_text:
+                                    st.info("🔍 步骤 3.5/5: 自动分析Excel结构...")
+                                progress_bar.progress(35)
+                                
+                                try:
+                                    # 自动进行Excel结构分析
+                                    st.session_state.quick_excel_analysis = ai_analyzer.analyze_excel_structure(st.session_state.excel_data)
+                                    
+                                    if debug_mode:
+                                        with log_container:
+                                            st.write("🔧 调试: 自动完成Excel结构分析")
+                                            st.write(f"🔧 调试: 结构分析结果长度={len(st.session_state.quick_excel_analysis)}字符")
+                                    
+                                except Exception as struct_error:
+                                    if debug_mode:
+                                        with log_container:
+                                            st.warning(f"🔧 调试: Excel结构分析失败 - {str(struct_error)}")
+                                    # 如果结构分析失败，设置一个默认值
+                                    st.session_state.quick_excel_analysis = "Excel结构分析暂不可用"
                             
                             # 更新进度回调函数
                             def update_progress(step, message):

@@ -1320,7 +1320,7 @@ class AdvancedExcelProcessor:
                 else:
                     # 只有一行数据，生成默认列名
                     columns = [f"列{i+1}" for i in range(len(data[0]))]
-                    df = pd.DataFrame(data, columns=columns)
+                df = pd.DataFrame(data, columns=columns)
             else:
                 df = pd.DataFrame()
             

@@ -350,16 +350,37 @@ class AITabAnalyzer:
         # 主要字段
         main_fields = [f for f in fields if f['importance'] == 'main']
         if main_fields:
-            result.append("*核心字段* (排除合并单元格后):")
+            result.append("*核心字段* (智能识别结果):")
+            
+            # 检查是否有字段名质量问题
+            has_issues = any(field.get('issues') for field in main_fields)
+            if has_issues:
+                result.append("  ⚠️ **字段名识别预警**:")
+                for field in main_fields:
+                    if field.get('issues'):
+                        for issue in field['issues']:
+                            result.append(f"    - {field['col']}列: {issue}")
+                result.append("")
+            
             for i, field in enumerate(main_fields, 1):
                 # 添加字段起始位置信息
                 field_start_pos = self._get_field_start_position(ws, field['col'], merged_ranges)
-                field_info = f"  {i}. `{field['col']}列` **{field['name']}** _(从{field_start_pos}开始)_"
+                
+                # 置信度图标
+                confidence = field.get('confidence', 1.0)
+                confidence_icon = "✅" if confidence >= 0.8 else "⚠️" if confidence >= 0.5 else "❓"
+                
+                field_info = f"  {i}. {confidence_icon} `{field['col']}列` **{field['name']}** _(从{field_start_pos}开始)_ (置信度:{confidence:.1%})"
+                
+                # 显示替代字段名建议
+                if field.get('alternatives'):
+                    field_info += f"\n      💡 建议的真实字段名: {', '.join(field['alternatives'])}"
                 
                 if field['unique_values']:
-                    field_info += f" (筛选项: {', '.join(map(str, field['unique_values']))})"
+                    field_info += f"\n      📊 筛选项: {', '.join(map(str, field['unique_values']))}"
                 elif field['sample_values']:
-                    field_info += f" (示例: {', '.join(map(str, field['sample_values'][:2]))}...)"
+                    field_info += f"\n      📝 示例: {', '.join(map(str, field['sample_values'][:2]))}..."
+                    
                 result.append(field_info)
         
         # 辅助字段
@@ -417,27 +438,15 @@ class AITabAnalyzer:
         return {'row': 2, 'col': 1}  # 默认值
     
     def _extract_complex_fields(self, ws, merge_analysis, data_start):
-        """提取复杂表格的字段"""
+        """提取复杂表格的字段（增强版 - 智能字段识别）"""
         fields = []
-        header_rows = [2, 3]  # demo2中主要是第2、3行作为表头
+        header_rows = self._intelligent_header_detection(ws)  # 智能检测表头行
         
         for col in range(1, min(ws.max_column + 1, 50)):  # 限制在50列内
-            field_name = self._get_complex_field_name(ws, col, header_rows, merge_analysis)
+            field_analysis = self._smart_field_analysis(ws, col, header_rows, merge_analysis, data_start)
             
-            if field_name:
-                # 判断字段重要性
-                importance = 'main' if col <= 16 else 'aux'  # 前16列为主要字段
-                
-                # 提取样本数据
-                sample_values, unique_values = self._extract_field_data(ws, col, data_start['row'])
-                
-                fields.append({
-                    'col': get_column_letter(col),
-                    'name': field_name,
-                    'importance': importance,
-                    'sample_values': sample_values,
-                    'unique_values': unique_values
-                })
+            if field_analysis:
+                fields.append(field_analysis)
         
         return fields
     
@@ -614,6 +623,172 @@ class AITabAnalyzer:
             return True
         except (ValueError, TypeError):
             return False
+    
+    def _intelligent_header_detection(self, ws):
+        """智能检测表头行（增强版）"""
+        header_candidates = []
+        
+        # 检查前10行
+        for row in range(1, min(11, ws.max_row + 1)):
+            row_data = []
+            for col in range(1, min(ws.max_column + 1, 50)):
+                cell = ws.cell(row, col)
+                if cell.value is not None:
+                    row_data.append(str(cell.value).strip())
+                else:
+                    row_data.append("")
+            
+            # 分析这一行作为表头的可能性
+            if any(data for data in row_data):  # 有非空内容
+                header_score = self._calculate_header_likelihood(row_data, ws, row)
+                header_candidates.append({
+                    'row': row,
+                    'score': header_score,
+                    'data': row_data
+                })
+        
+        # 选择最佳表头行
+        if header_candidates:
+            best_candidate = max(header_candidates, key=lambda x: x['score'])
+            suggested_rows = [best_candidate['row']]
+            
+            # 如果有多行表头的情况，添加相邻行
+            if best_candidate['score'] > 0.7:
+                for candidate in header_candidates:
+                    if (abs(candidate['row'] - best_candidate['row']) <= 1 and 
+                        candidate['score'] > 0.5 and 
+                        candidate['row'] != best_candidate['row']):
+                        suggested_rows.append(candidate['row'])
+            
+            return sorted(suggested_rows)
+        
+        return [2, 3]  # 默认值
+    
+    def _calculate_header_likelihood(self, row_data, ws, row_num):
+        """计算行作为表头的可能性评分"""
+        if not any(data for data in row_data):
+            return 0.0
+        
+        score = 0.0
+        non_empty_count = sum(1 for data in row_data if data.strip())
+        
+        # 1. 文本比例评分（表头通常是文本）
+        text_count = 0
+        for data in row_data:
+            if data.strip():
+                try:
+                    float(data)
+                except (ValueError, TypeError):
+                    text_count += 1
+        
+        if non_empty_count > 0:
+            text_ratio = text_count / non_empty_count
+            score += text_ratio * 0.4
+        
+        # 2. 唯一性评分（表头字段名通常是唯一的）
+        unique_ratio = len(set(row_data)) / len(row_data) if row_data else 0
+        score += unique_ratio * 0.3
+        
+        # 3. 长度评分（表头字段名通常简洁）
+        avg_length = sum(len(data) for data in row_data if data.strip()) / max(non_empty_count, 1)
+        if 2 <= avg_length <= 15:
+            score += 0.2
+        
+        # 4. 位置评分（表头通常在前几行）
+        position_score = max(0, (10 - row_num) / 10) * 0.1
+        score += position_score
+        
+        return min(score, 1.0)
+    
+    def _smart_field_analysis(self, ws, col, header_rows, merge_analysis, data_start):
+        """智能字段分析（核心方法）"""
+        # 收集候选字段名
+        field_candidates = []
+        
+        for row in header_rows:
+            cell = ws.cell(row, col)
+            if cell.value is not None:
+                value = str(cell.value).strip()
+                if value:
+                    field_candidates.append({
+                        'name': value,
+                        'row': row,
+                        'confidence': self._evaluate_field_name_quality(value)
+                    })
+        
+        if not field_candidates:
+            return None
+        
+        # 选择最佳字段名
+        best_candidate = max(field_candidates, key=lambda x: x['confidence'])
+        
+        # 检查是否存在字段名质量问题
+        alternatives = []
+        issues = []
+        
+        if best_candidate['confidence'] < 0.7:
+            # 字段名质量较低，尝试寻找替代方案
+            issues.append(f"字段名'{best_candidate['name']}'可能不准确")
+            
+            # 查找上下行的可能更好的字段名
+            for search_row in range(max(1, best_candidate['row'] - 2), 
+                                  min(ws.max_row + 1, best_candidate['row'] + 3)):
+                if search_row != best_candidate['row']:
+                    search_cell = ws.cell(search_row, col)
+                    if search_cell.value:
+                        alt_name = str(search_cell.value).strip()
+                        alt_quality = self._evaluate_field_name_quality(alt_name)
+                        if alt_quality > best_candidate['confidence']:
+                            alternatives.append(alt_name)
+        
+        # 提取样本数据
+        sample_values, unique_values = self._extract_field_data(ws, col, data_start['row'])
+        
+        # 判断字段重要性
+        importance = 'main' if col <= 16 else 'aux'
+        
+        field_analysis = {
+            'col': get_column_letter(col),
+            'name': best_candidate['name'],
+            'confidence': best_candidate['confidence'],
+            'importance': importance,
+            'sample_values': sample_values,
+            'unique_values': unique_values,
+            'source_row': best_candidate['row'],
+            'alternatives': alternatives,
+            'issues': issues
+        }
+        
+        return field_analysis
+    
+    def _evaluate_field_name_quality(self, field_name):
+        """评估字段名质量（0-1分数）"""
+        if not field_name or len(field_name.strip()) == 0:
+            return 0.0
+        
+        score = 0.5  # 基础分
+        field_name = field_name.strip()
+        
+        # 长度评分
+        if 2 <= len(field_name) <= 20:
+            score += 0.2
+        elif len(field_name) > 50:
+            score -= 0.3
+        
+        # 检查是否像真正的字段名
+        if self._looks_like_header(field_name):
+            score += 0.2
+        
+        # 检查是否包含数据特征（负面评分）
+        if self._looks_like_date(field_name) or self._is_numeric(field_name):
+            score -= 0.3
+        
+        # 检查是否有特殊字符
+        special_chars = len([c for c in field_name if c in '\n\r\t'])
+        if special_chars > 0:
+            score -= 0.2
+        
+        return max(0.0, min(1.0, score))
     
     def _get_field_start_position(self, ws, col_letter, merged_ranges):
         """获取字段实际开始的位置（排除合并单元格）"""
